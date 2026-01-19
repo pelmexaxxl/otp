@@ -585,15 +585,19 @@ const UIComponents = {
   updateActionPanel() {
     const panel = document.getElementById('actionButtons');
     const countEl = document.getElementById('selectedCount');
+    console.log('panel exists:', !!panel, 'countEl exists:', !!countEl);
     const differentStatus = document.getElementById('differentStatus');
 
     if (!panel) return;
 
     const state = SelectionManager.getState();
+    console.log('updateActionPanel count=', state.count);
     const selectedIncidents = DataManager.getAll().filter(item => state.selectedIds.has(item.id));
     const statuses = new Set(selectedIncidents.map(i => i.status));
     const hasSingleStatus = statuses.size === 1;
     const currentStatus = hasSingleStatus ? [...statuses][0] : null;
+
+    
 
     if (state.count > 0) {
       panel.style.display = 'block';
@@ -716,9 +720,12 @@ const EventHandlers = {
     const checkbox = e.target;
     const row = checkbox.closest('tr');
     const id = row.dataset.id;
+    console.log('checkbox clicked, real id=»' + id + '«');
 
     SelectionManager.toggle(id);
     UIComponents.updateActionPanel();
+    console.log('checkbox clicked, id=', id);
+    console.log('updated, selected count=', SelectionManager.getState().count);
 
     if (checkbox.checked) {
       row.classList.add('selected');
@@ -1108,9 +1115,14 @@ const App = {
         // Обновляем пагинацию
         PaginationManager.init(sorted.length);
         const pageData = PaginationManager.getPageData(sorted);
-
+        
         UIComponents.renderTable(pageData);
         UIComponents.renderPagination();
+
+        if (window.columnResizer) {
+          window.columnResizer.loadSavedWidths();
+        }
+
         this.attachRowEventListeners();
         UIComponents.updateActionPanel();
       });
@@ -1167,7 +1179,25 @@ const App = {
       paginationContainer.addEventListener('click', EventHandlers.handlePaginationClick.bind(EventHandlers));
     }
 
-    EventHandlers.attachRowEventListeners();
+        // делегирование для динамических строк
+    const table = document.getElementById('errorsTable');
+
+    // чекбоксы
+    table.addEventListener('change', e => {
+      if (e.target.classList.contains('row-checkbox')) {
+        EventHandlers.handleCheckboxChange(e);
+      }
+    });
+
+    // кнопки редактирования
+    table.addEventListener('click', e => {
+      if (e.target.classList.contains('edit-btn')) {
+        EventHandlers.handleEditClick(e);
+      }
+    });
+
+    /* убираем старый прямой вызов
+       EventHandlers.attachRowEventListeners(); */
   },
 
   attachRowEventListeners() {

@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление ошибочными записями</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        .table-container {
+            max-width: 2200px;
+            margin: 0 auto;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        
+        /* Стили для таблицы с изменяемыми колонками */
+        .data-table {
+            min-width: 1800px;
+            table-layout: fixed;
+            border-collapse: collapse;
+        }
+        .data-table th {
+            position: relative;
+            background-color: #f8f9fa;
+            font-weight: 600;
+            vertical-align: middle;
+            border: 1px solid #dee2e6;
+            padding: 8px;
+        }
+        .data-table td {
+            vertical-align: top;
+            border: 1px solid #dee2e6;
+            padding: 8px;
+        }
+        
+        /* Колонки с изменяемой шириной */
+        .checkbox-cell {
+            width: 50px;
+            min-width: 50px;
+            max-width: 50px;
+        }
+        .col-pk {
+            width: 250px;
+            min-width: 200px;
+            max-width: 300px;
+        }
+        .col-incident {
+            width: 150px;
+            min-width: 120px;
+            max-width: 200px;
+        }
+        .col-executor {
+            width: 250px;
+            min-width: 200px;
+            max-width: 300px;
+        }
+        .col-exception {
+            width: 150px;
+            min-width: 120px;
+            max-width: 200px;
+        }
+        .col-status {
+            width: 150px;
+            min-width: 120px;
+            max-width: 200px;
+        }
+        .col-table {
+            width: 200px;
+            min-width: 150px;
+            max-width: 250px;
+        }
+        .col-attr {
+            width: 200px;
+            min-width: 150px;
+            max-width: 250px;
+        }
+        .col-comment {
+            width: 300px;
+            min-width: 250px;
+            max-width: 400px;
+        }
+        .col-actions {
+            width: 120px;
+            min-width: 100px;
+            max-width: 150px;
+        }
+        
+        /* Ресайз колонок */
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 5px;
+            height: 100%;
+            cursor: col-resize;
+            background-color: transparent;
+            z-index: 10;
+        }
+        .resize-handle:hover,
+        .resize-handle.resizing {
+            background-color: #0d6efd;
+        }
+        
+        /* Контент ячеек */
+        .cell-content {
+            overflow: hidden;
+            word-wrap: break-word;
+        }
+        .pk-wrapper {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .pk-truncated {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pk-full {
+            background-color: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            word-break: break-all;
+            font-size: 0.85em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* JSON данные */
+        .json-data {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+            background-color: #f8f9fa;
+            padding: 4px;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+            max-height: 100px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        .json-preview {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        
+        /* Массовые операции */
+        .mass-actions {
+            background-color: #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        .mass-actions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .mass-actions-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        /* Фильтры в заголовке */
+        .header-filter {
+            margin-top: 5px;
+            font-size: 0.85em;
+        }
+        .header-filter input,
+        .header-filter select {
+            width: 100%;
+            padding: 3px 6px;
+            font-size: 0.9em;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+        }
+        .header-filter input:focus,
+        .header-filter select:focus {
+            outline: none;
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        /* Стили для строк таблицы */
+        .selected-row {
+            background-color: #e7f1ff !important;
+        }
+        .data-table tbody tr:hover {
+            background-color: #f5f5f5 !important;
+        }
+        
+        /* Бейджи статусов */
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        .status-new { background-color: #fff3cd; color: #856404; }
+        .status-in_progress { background-color: #cff4fc; color: #055160; }
+        .status-resolved { background-color: #d1e7dd; color: #0f5132; }
+        .status-closed { background-color: #d8d8d8; color: #495057; }
+        
+        /* Пагинация */
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        /* Иконки */
+        .icon-btn {
+            padding: 4px 8px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            color: #6c757d;
+        }
+        .icon-btn:hover {
+            color: #0d6efd;
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 1200px) {
+            .table-container {
+                padding: 10px;
+            }
+            .data-table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="table-container">
+        <!-- Заголовок -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Управление ошибочными записями</h2>
+            <div>
+                <button @click="loadMockData" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-clockwise"></i> Обновить
+                </button>
+                <span class="badge bg-secondary ms-2">Моковые данные</span>
+            </div>
+        </div>
+        
+        <!-- Панель массовых операций -->
+        <div v-if="selectedErrors.length > 0" class="mass-actions">
+            <div class="mass-actions-header">
+                <div>
+                    <span class="selected-count">{{ selectedErrors.length }}</span> записей выбрано
+                    <span v-if="hasCommonStatus" class="ms-3">
+                        Общий статус: <span class="status-badge" :class="getStatusBadgeClass(selectedErrors[0].status)">
+                            {{ getStatusLabel(selectedErrors[0].status) }}
+                        </span>
+                    </span>
+                    <span v-else class="ms-3 text-warning">
+                        <i class="bi bi-exclamation-triangle"></i> Разные статусы
+                    </span>
+                </div>
+                <button @click="clearSelection" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> Сбросить выбор
+                </button>
+            </div>
+            
+            <div class="mass-actions-buttons">
+                <div class="btn-group" v-if="hasCommonStatus">
+                    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="bi bi-tag"></i> Изменить статус
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li v-for="status in statuses" :key="status.value">
+                            <a class="dropdown-item" href="#" @click.prevent="bulkUpdateStatus(status.value)">
+                                {{ status.label }}
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <button @click="openBulkPerformerModal" 
+                        class="btn btn-success"
+                        :disabled="!hasCommonStatus">
+                    <i class="bi bi-people"></i> Назначить ответственного
+                </button>
+                
+                <button @click="openBulkCommentModal" 
+                        class="btn btn-info"
+                        :disabled="!hasCommonStatus">
+                    <i class="bi bi-chat-text"></i> Добавить комментарий
+                </button>
+            </div>
+        </div>
+        
+        <!-- Таблица -->
+        <div class="table-responsive">
+            <table class="table data-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" 
+                                   id="selectAll" 
+                                   class="form-check-input"
+                                   :checked="isAllSelectedOnPage"
+                                   @change="toggleSelectAllOnPage">
+                        </th>
+                        <th class="col-pk sortable-header" 
+                            @click="sortBy('pk')"
+                            :class="{ active: sortField === 'pk' }">
+                            Первичный ключ
+                            <div class="header-filter">
+                                <input type="text" 
+                                       v-model="filterPk" 
+                                       @input="applyFilters"
+                                       placeholder="Фильтр по PK..."
+                                       class="form-control form-control-sm">
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-pk')"
+                                 @dblclick="resetColumnWidth('col-pk')"></div>
+                        </th>
+                        <th class="col-incident sortable-header" 
+                            @click="sortBy('incident_id')"
+                            :class="{ active: sortField === 'incident_id' }">
+                            ID инцидента
+                            <div class="header-filter">
+                                <input type="text" 
+                                       v-model="filterIncidentId" 
+                                       @input="applyFilters"
+                                       placeholder="Фильтр по ID..."
+                                       class="form-control form-control-sm">
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-incident')"
+                                 @dblclick="resetColumnWidth('col-incident')"></div>
+                        </th>
+                        <th class="col-executor sortable-header" 
+                            @click="sortBy('executor_name')"
+                            :class="{ active: sortField === 'executor_name' }">
+                            Ответственный
+                            <div class="header-filter">
+                                <select v-model="filterExecutor" @change="applyFilters" class="form-select form-select-sm">
+                                    <option value="">Все</option>
+                                    <option v-for="executor in uniqueExecutors" :value="executor.id" :key="executor.id">
+                                        {{ executor.name }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-executor')"
+                                 @dblclick="resetColumnWidth('col-executor')"></div>
+                        </th>
+                        <th class="col-exception">
+                            Исключение
+                            <div class="header-filter">
+                                <select v-model="filterException" @change="applyFilters" class="form-select form-select-sm">
+                                    <option value="">Все</option>
+                                    <option v-for="dq in uniqueDQ" :value="dq" :key="dq">
+                                        DQ: {{ dq }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-exception')"
+                                 @dblclick="resetColumnWidth('col-exception')"></div>
+                        </th>
+                        <th class="col-status sortable-header" 
+                            @click="sortBy('status')"
+                            :class="{ active: sortField === 'status' }">
+                            Статус
+                            <div class="header-filter">
+                                <select v-model="filterStatus" @change="applyFilters" class="form-select form-select-sm">
+                                    <option value="">Все</option>
+                                    <option v-for="status in statuses" :value="status.value" :key="status.value">
+                                        {{ status.label }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-status')"
+                                 @dblclick="resetColumnWidth('col-status')"></div>
+                        </th>
+                        <th class="col-table sortable-header" 
+                            @click="sortBy('bd_table')"
+                            :class="{ active: sortField === 'bd_table' }">
+                            Таблица
+                            <div class="header-filter">
+                                <select v-model="filterTable" @change="applyFilters" class="form-select form-select-sm">
+                                    <option value="">Все</option>
+                                    <option v-for="table in uniqueTables" :value="table.id" :key="table.id">
+                                        {{ table.name }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-table')"
+                                 @dblclick="resetColumnWidth('col-table')"></div>
+                        </th>
+                        <th class="col-attr sortable-header" 
+                            @click="sortBy('bd_table_attr')"
+                            :class="{ active: sortField === 'bd_table_attr' }">
+                            Атрибут таблицы
+                            <div class="header-filter">
+                                <select v-model="filterAttr" @change="applyFilters" class="form-select form-select-sm">
+                                    <option value="">Все</option>
+                                    <option v-for="attr in uniqueAttrs" :value="attr.id" :key="attr.id">
+                                        {{ attr.name }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-attr')"
+                                 @dblclick="resetColumnWidth('col-attr')"></div>
+                        </th>
+                        <th class="col-comment">
+                            Комментарий
+                            <div class="header-filter">
+                                <input type="text" 
+                                       v-model="filterComment" 
+                                       @input="applyFilters"
+                                       placeholder="Поиск в комментариях..."
+                                       class="form-control form-control-sm">
+                            </div>
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-comment')"
+                                 @dblclick="resetColumnWidth('col-comment')"></div>
+                        </th>
+                        <th class="col-actions">
+                            Действия
+                            <div class="resize-handle" 
+                                 @mousedown="startResize($event, 'col-actions')"
+                                 @dblclick="resetColumnWidth('col-actions')"></div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="error in paginatedErrors" 
+                        :key="error.incident_id" 
+                        :class="{ 'selected-row': isErrorSelected(error.incident_id) }">
+                        <td class="checkbox-cell">
+                            <input type="checkbox" 
+                                   class="form-check-input"
+                                   :checked="isErrorSelected(error.incident_id)"
+                                   @change="toggleErrorSelection(error.incident_id)">
+                        </td>
+                        <td class="col-pk">
+                            <div class="cell-content">
+                                <div class="pk-wrapper" @click="showFullJson(error.pk, 'Первичный ключ')">
+                                    <div class="pk-truncated" :title="error.pk">
+                                        {{ truncateJson(error.pk) }}
+                                    </div>
+                                </div>
+                                <button @click="copyJson(error.pk)" class="btn btn-sm btn-outline-secondary mt-1 w-100">
+                                    <i class="bi bi-clipboard"></i> Копировать PK
+                                </button>
+                            </div>
+                        </td>
+                        <td class="col-incident">
+                            <div class="cell-content">
+                                <div class="mb-1">
+                                    <strong>{{ error.incident_id }}</strong>
+                                </div>
+                                <div class="small text-muted mb-1">
+                                    <div>DQ: {{ error.dqimplementation_id }}</div>
+                                    <div>Bad: {{ error.bad_records_id }}</div>
+                                </div>
+                                <div class="small">
+                                    <div>Запуск: {{ formatDate(error.run_ts) }}</div>
+                                    <div v-if="error.master_incident_id" class="text-info">
+                                        Мастер: {{ error.master_incident_id }}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-executor">
+                            <div class="cell-content">
+                                <div v-if="error.executor_name && parseJSON(error.executor_name).length > 0">
+                                    <div v-for="executor in parseJSON(error.executor_name)" :key="executor.id">
+                                        <strong>{{ executor.name }}</strong>
+                                        <div class="small text-muted">{{ executor.type }}</div>
+                                        <div class="small badge bg-info">{{ executor.relation?.type }}</div>
+                                    </div>
+                                </div>
+                                <div v-else class="text-muted">
+                                    Не назначен
+                                </div>
+                                <button v-if="!error.updating" 
+                                        @click="openPerformerModal(error)" 
+                                        class="btn btn-sm btn-outline-primary mt-2 w-100">
+                                    <i class="bi bi-person-plus"></i> Назначить
+                                </button>
+                                <div v-else class="text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-exception">
+                            <div class="cell-content">
+                                <div class="mb-2">
+                                    <div class="small text-muted">DQ ID:</div>
+                                    <strong>{{ error.dqimplementation_id }}</strong>
+                                </div>
+                                <div>
+                                    <div class="small text-muted">Bad Records:</div>
+                                    <strong>{{ error.bad_records_id }}</strong>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-status">
+                            <div class="cell-content">
+                                <select v-model="error.status" 
+                                        @change="updateStatus(error)"
+                                        class="form-select form-select-sm mb-2">
+                                    <option v-for="status in statuses" 
+                                            :value="status.value"
+                                            :key="status.value">
+                                        {{ status.label }}
+                                    </option>
+                                </select>
+                                <div class="status-badge mb-1" :class="getStatusBadgeClass(error.status)">
+                                    {{ getStatusLabel(error.status) }}
+                                </div>
+                                <div class="small text-muted">
+                                    {{ error.updatedAt ? formatDate(error.updatedAt) : formatDate(error.run_ts) }}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-table">
+                            <div class="cell-content">
+                                <div v-if="error.bd_table && parseJSON(error.bd_table).length > 0">
+                                    <div v-for="table in parseJSON(error.bd_table)" :key="table.id">
+                                        <strong>{{ table.name }}</strong>
+                                        <div class="small text-muted">ID: {{ table.id }}</div>
+                                        <div class="small badge bg-secondary">{{ table.relation?.type }}</div>
+                                    </div>
+                                </div>
+                                <div v-else class="text-muted">
+                                    Нет данных
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-attr">
+                            <div class="cell-content">
+                                <div v-if="error.bd_table_attr && parseJSON(error.bd_table_attr).length > 0">
+                                    <div v-for="attr in parseJSON(error.bd_table_attr)" :key="attr.id">
+                                        <strong>{{ attr.name }}</strong>
+                                        <div class="small text-muted">ID: {{ attr.id }}</div>
+                                        <div class="small badge bg-secondary">{{ attr.relation?.type }}</div>
+                                    </div>
+                                </div>
+                                <div v-else class="text-muted">
+                                    Нет данных
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-comment">
+                            <div class="cell-content">
+                                <textarea v-model="error.comment" 
+                                          @blur="updateComment(error)"
+                                          class="form-control form-control-sm"
+                                          rows="3"
+                                          placeholder="Введите комментарий..."></textarea>
+                                <div class="mt-2 small">
+                                    <div v-if="error.comment" class="text-success">
+                                        <i class="bi bi-chat-text"></i> Комментарий добавлен
+                                    </div>
+                                    <div v-else class="text-muted">
+                                        <i class="bi bi-chat"></i> Нет комментария
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-actions">
+                            <div class="cell-content">
+                                <div class="d-flex flex-column gap-2">
+                                    <button @click="showFullError(error)" 
+                                            class="btn btn-sm btn-outline-info w-100">
+                                        <i class="bi bi-eye"></i> Просмотр
+                                    </button>
+                                    <button @click="copyErrorId(error.incident_id)" 
+                                            class="btn btn-sm btn-outline-secondary w-100">
+                                        <i class="bi bi-clipboard"></i> ID
+                                    </button>
+                                    <button @click="openPerformerModal(error)" 
+                                            class="btn btn-sm btn-outline-primary w-100">
+                                        <i class="bi bi-person-plus"></i> Ответств.
+                                    </button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr v-if="paginatedErrors.length === 0">
+                        <td colspan="10" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox display-6"></i>
+                            <p class="mt-2">Нет данных, соответствующих фильтрам</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Пагинация -->
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Показано {{ startItem }}-{{ endItem }} из {{ filteredErrors.length }} записей
+                <span v-if="selectedErrorIds.size > 0" class="ms-2">
+                    (Выбрано: {{ selectedErrorIds.size }})
+                </span>
+            </div>
+            
+            <div class="pagination-controls">
+                <div class="page-size-selector">
+                    <span>Записей на странице:</span>
+                    <select v-model="pageSize" @change="changePageSize" class="form-select form-select-sm">
+                        <option v-for="size in pageSizeOptions" :value="size" :key="size">
+                            {{ size }}
+                        </option>
+                    </select>
+                </div>
+                
+                <div class="pagination-nav">
+                    <button @click="goToPage(1)" :disabled="currentPage === 1" class="page-link">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </button>
+                    <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" class="page-link">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    
+                    <template v-for="page in visiblePages" :key="page">
+                        <button v-if="page === '...'" class="page-link disabled" disabled>...</button>
+                        <button v-else @click="goToPage(page)" :class="['page-link', { active: page === currentPage }]">
+                            {{ page }}
+                        </button>
+                    </template>
+                    
+                    <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages" class="page-link">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    <button @click="goToPage(totalPages)" :disabled="currentPage === totalPages" class="page-link">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальные окна -->
+        <div class="modal fade" id="jsonModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ jsonModalTitle }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <pre class="json-data p-3" style="max-height: 400px;">{{ selectedJson }}</pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button @click="copyJson(selectedJson)" class="btn btn-primary">
+                            <i class="bi bi-clipboard"></i> Копировать
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="performerModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            Назначение ответственного для инцидента #{{ selectedError?.incident_id }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <input type="text" 
+                                       v-model="searchQuery"
+                                       @input="debouncedSearch"
+                                       class="form-control"
+                                       placeholder="Поиск ответственного...">
+                                <button class="btn btn-outline-secondary" type="button" @click="searchPerformers">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="searchResults.length > 0" class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Имя</th>
+                                        <th>Тип</th>
+                                        <th>Действие</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="performer in searchResults" :key="performer.id">
+                                        <td><span class="badge bg-secondary">{{ performer.id }}</span></td>
+                                        <td>{{ performer.name }}</td>
+                                        <td><span class="badge bg-info">{{ performer.type }}</span></td>
+                                        <td>
+                                            <button @click="selectPerformer(performer)" class="btn btn-sm btn-success">
+                                                <i class="bi bi-check-lg"></i> Выбрать
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="bulkPerformerModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Групповое назначение ответственного</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle"></i>
+                            Будет назначен на {{ selectedErrors.length }} выбранных записей
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="input-group mb-3">
+                                <input type="text" 
+                                       v-model="bulkPerformerSearch"
+                                       @input="searchBulkPerformer"
+                                       class="form-control"
+                                       placeholder="Поиск ответственного...">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            
+                            <div v-if="bulkPerformerResults.length > 0" class="list-group">
+                                <a href="#" 
+                                   v-for="performer in bulkPerformerResults" 
+                                   :key="performer.id"
+                                   class="list-group-item list-group-item-action"
+                                   @click.prevent="selectBulkPerformer(performer)">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ performer.name }}</strong>
+                                            <div class="small text-muted">{{ performer.type }}</div>
+                                        </div>
+                                        <i class="bi bi-check-lg text-success" v-if="bulkSelectedPerformer?.id === performer.id"></i>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="button" 
+                                class="btn btn-primary" 
+                                @click="applyBulkPerformer"
+                                :disabled="!bulkSelectedPerformer">
+                            Назначить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="bulkCommentModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Групповое добавление комментария</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <textarea v-model="bulkComment" 
+                                      class="form-control" 
+                                      rows="4"
+                                      placeholder="Введите комментарий..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="button" 
+                                class="btn btn-primary" 
+                                @click="applyBulkComment"
+                                :disabled="!bulkComment.trim()">
+                            Применить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Уведомления -->
+        <div v-if="notification.show" 
+             :class="`alert alert-${notification.type} alert-dismissible fade show position-fixed top-0 end-0 m-3`"
+             style="z-index: 1060; max-width: 400px;">
+            <strong>{{ notification.title }}</strong> {{ notification.message }}
+            <button type="button" class="btn-close" @click="notification.show = false"></button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // Основные данные
+                const errors = ref([]);
+                const filteredErrors = ref([]);
+                const searchResults = ref([]);
+                const searchQuery = ref('');
+                const selectedError = ref(null);
+                const selectedJson = ref('');
+                const jsonModalTitle = ref('');
+                
+                // Фильтры в заголовках
+                const filterPk = ref('');
+                const filterIncidentId = ref('');
+                const filterExecutor = ref('');
+                const filterException = ref('');
+                const filterStatus = ref('');
+                const filterTable = ref('');
+                const filterAttr = ref('');
+                const filterComment = ref('');
+                
+                // Массовый выбор
+                const selectedErrorIds = ref(new Set());
+                
+                // Сортировка
+                const sortField = ref('incident_id');
+                const sortDirection = ref('asc');
+                
+                // Пагинация
+                const currentPage = ref(1);
+                const pageSize = ref(10);
+                const pageSizeOptions = [5, 10, 20, 50, 100];
+                
+                // Групповые операции
+                const bulkPerformerSearch = ref('');
+                const bulkPerformerResults = ref([]);
+                const bulkSelectedPerformer = ref(null);
+                const bulkComment = ref('');
+                
+                // Ресайз колонок
+                const isResizing = ref(false);
+                const currentResizeColumn = ref('');
+                const startX = ref(0);
+                const startWidth = ref(0);
+                
+                // Статусы
+                const statuses = [
+                    { value: 10, label: 'Новый', class: 'new' },
+                    { value: 20, label: 'В работе', class: 'in_progress' },
+                    { value: 30, label: 'Решен', class: 'resolved' },
+                    { value: 40, label: 'Закрыт', class: 'closed' }
+                ];
+
+                // Моковые данные
+                const mockErrors = [
+                    {
+                        incident_id: 5263846,
+                        dqimplementation_id: 1723790,
+                        bad_records_id: 12899826,
+                        run_ts: "2025-12-26T12:36:28.077914+00:00",
+                        executor_name: '[{"id": 1437595, "name": "Дворецкий Александр (a.dvoretskiy@otpbank.ru)", "type": "User", "relation": {"type": "BUSINESSTEWARD", "description": ""}}]',
+                        status: 10,
+                        master_incident_id: null,
+                        pk: '{"person_hk": "00d3ff0a-ebde-2128-946a-b4802984d025"}',
+                        bd_table: '[{"id": 3028829, "name": "#T10_sid:93515448_1_Filte", "type": "Table", "relation": {"type": "INC_SOURCE", "description": ""}}]',
+                        bd_table_attr: '[{"id": 3028444, "name": "_Tableau_join_flag", "type": "TableColumn", "relation": {"type": "INC_TABLE_COLUMN", "description": ""}}]',
+                        comment: '',
+                        updatedAt: null
+                    },
+                    {
+                        incident_id: 5263847,
+                        dqimplementation_id: 1723791,
+                        bad_records_id: 12899827,
+                        run_ts: "2025-12-26T13:45:22.123456+00:00",
+                        executor_name: '[{"id": 1437596, "name": "Иванов Иван (i.ivanov@otpbank.ru)", "type": "User", "relation": {"type": "TECHNICALSTEWARD", "description": ""}}]',
+                        status: 20,
+                        master_incident_id: 5263846,
+                        pk: '{"order_id": "ORD-1234567890", "customer_id": "CUST-987654"}',
+                        bd_table: '[{"id": 3028830, "name": "orders_table_v2", "type": "Table", "relation": {"type": "INC_SOURCE", "description": ""}}]',
+                        bd_table_attr: '[{"id": 3028445, "name": "order_status", "type": "TableColumn", "relation": {"type": "INC_TABLE_COLUMN", "description": ""}}]',
+                        comment: 'Проверка статуса заказа',
+                        updatedAt: "2025-12-27T09:15:00"
+                    },
+                    {
+                        incident_id: 5263848,
+                        dqimplementation_id: 1723792,
+                        bad_records_id: 12899828,
+                        run_ts: "2025-12-26T14:22:18.654321+00:00",
+                        executor_name: null,
+                        status: 10,
+                        master_incident_id: null,
+                        pk: '{"transaction_id": "TRX-20251226-001", "account_number": "ACC-777888999"}',
+                        bd_table: '[{"id": 3028831, "name": "financial_transactions", "type": "Table", "relation": {"type": "INC_SOURCE", "description": ""}}]',
+                        bd_table_attr: '[{"id": 3028446, "name": "amount", "type": "TableColumn", "relation": {"type": "INC_TABLE_COLUMN", "description": ""}}]',
+                        comment: '',
+                        updatedAt: null
+                    }
+                ];
+
+                // Моковые исполнители для поиска
+                const mockPerformers = [
+                    { id: 1437595, name: 'Дворецкий Александр (a.dvoretskiy@otpbank.ru)', type: 'User' },
+                    { id: 1437596, name: 'Иванов Иван (i.ivanov@otpbank.ru)', type: 'User' },
+                    { id: 1437597, name: 'Петрова Мария (m.petrova@otpbank.ru)', type: 'User' },
+                    { id: 1437598, name: 'Сидоров Алексей (a.sidorov@otpbank.ru)', type: 'User' },
+                    { id: 1437599, name: 'Кузнецова Елена (e.kuznetsova@otpbank.ru)', type: 'User' }
+                ];
+
+                // Уведомления
+                const notification = ref({
+                    show: false,
+                    type: 'success',
+                    title: '',
+                    message: ''
+                });
+
+                // Вычисляемые свойства
+                const selectedErrors = computed(() => {
+                    return errors.value.filter(error => selectedErrorIds.value.has(error.incident_id));
+                });
+
+                const isAllSelectedOnPage = computed(() => {
+                    if (paginatedErrors.value.length === 0) return false;
+                    return paginatedErrors.value.every(error => selectedErrorIds.value.has(error.incident_id));
+                });
+
+                const hasCommonStatus = computed(() => {
+                    if (selectedErrors.value.length === 0) return false;
+                    const firstStatus = selectedErrors.value[0].status;
+                    return selectedErrors.value.every(error => error.status === firstStatus);
+                });
+
+                const uniqueExecutors = computed(() => {
+                    const executors = new Map();
+                    errors.value.forEach(error => {
+                        if (error.executor_name) {
+                            const parsed = parseJSON(error.executor_name);
+                            parsed.forEach(executor => {
+                                if (!executors.has(executor.id)) {
+                                    executors.set(executor.id, executor);
+                                }
+                            });
+                        }
+                    });
+                    return Array.from(executors.values());
+                });
+
+                const uniqueTables = computed(() => {
+                    const tables = new Map();
+                    errors.value.forEach(error => {
+                        if (error.bd_table) {
+                            const parsed = parseJSON(error.bd_table);
+                            parsed.forEach(table => {
+                                if (!tables.has(table.id)) {
+                                    tables.set(table.id, table);
+                                }
+                            });
+                        }
+                    });
+                    return Array.from(tables.values());
+                });
+
+                const uniqueAttrs = computed(() => {
+                    const attrs = new Map();
+                    errors.value.forEach(error => {
+                        if (error.bd_table_attr) {
+                            const parsed = parseJSON(error.bd_table_attr);
+                            parsed.forEach(attr => {
+                                if (!attrs.has(attr.id)) {
+                                    attrs.set(attr.id, attr);
+                                }
+                            });
+                        }
+                    });
+                    return Array.from(attrs.values());
+                });
+
+                const uniqueDQ = computed(() => {
+                    const dqSet = new Set();
+                    errors.value.forEach(error => {
+                        dqSet.add(error.dqimplementation_id);
+                    });
+                    return Array.from(dqSet).sort((a, b) => a - b);
+                });
+
+                // Пагинация
+                const totalPages = computed(() => {
+                    return Math.ceil(filteredErrors.value.length / pageSize.value);
+                });
+
+                const paginatedErrors = computed(() => {
+                    const start = (currentPage.value - 1) * pageSize.value;
+                    const end = start + pageSize.value;
+                    return filteredErrors.value.slice(start, end);
+                });
+
+                const startItem = computed(() => {
+                    return filteredErrors.value.length === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1;
+                });
+
+                const endItem = computed(() => {
+                    const end = currentPage.value * pageSize.value;
+                    return end > filteredErrors.value.length ? filteredErrors.value.length : end;
+                });
+
+                const visiblePages = computed(() => {
+                    const pages = [];
+                    const maxVisible = 5;
+                    
+                    if (totalPages.value <= maxVisible) {
+                        for (let i = 1; i <= totalPages.value; i++) {
+                            pages.push(i);
+                        }
+                    } else {
+                        if (currentPage.value <= 3) {
+                            for (let i = 1; i <= 4; i++) pages.push(i);
+                            pages.push('...');
+                            pages.push(totalPages.value);
+                        } else if (currentPage.value >= totalPages.value - 2) {
+                            pages.push(1);
+                            pages.push('...');
+                            for (let i = totalPages.value - 3; i <= totalPages.value; i++) pages.push(i);
+                        } else {
+                            pages.push(1);
+                            pages.push('...');
+                            pages.push(currentPage.value - 1);
+                            pages.push(currentPage.value);
+                            pages.push(currentPage.value + 1);
+                            pages.push('...');
+                            pages.push(totalPages.value);
+                        }
+                    }
+                    
+                    return pages;
+                });
+
+                // Инициализация
+                onMounted(() => {
+                    loadMockData();
+                    setupResizeListeners();
+                });
+
+                // Вспомогательные функции
+                function parseJSON(jsonString) {
+                    try {
+                        return JSON.parse(jsonString);
+                    } catch (e) {
+                        return [];
+                    }
+                }
+
+                function formatDate(dateString) {
+                    if (!dateString) return 'Нет данных';
+                    const date = new Date(dateString);
+                    return date.toLocaleString('ru-RU');
+                }
+
+                function truncateJson(jsonString) {
+                    if (!jsonString) return '';
+                    if (jsonString.length <= 50) return jsonString;
+                    return jsonString.substring(0, 50) + '...';
+                }
+
+                function getStatusLabel(statusCode) {
+                    const status = statuses.find(s => s.value === statusCode);
+                    return status ? status.label : 'Неизвестно';
+                }
+
+                function getStatusBadgeClass(statusCode) {
+                    const status = statuses.find(s => s.value === statusCode);
+                    return status ? `status-${status.class}` : 'status-new';
+                }
+
+                // Загрузка данных
+                function loadMockData() {
+                    // Увеличим количество записей для демонстрации
+                    const additionalErrors = [];
+                    for (let i = 4; i <= 25; i++) {
+                        additionalErrors.push({
+                            incident_id: 5263846 + i,
+                            dqimplementation_id: 1723790 + i,
+                            bad_records_id: 12899826 + i,
+                            run_ts: `2025-12-${26 - Math.floor(i/5)}T${10 + i%8}:${30 + i%30}:00.000000+00:00`,
+                            executor_name: i % 3 === 0 ? null : JSON.stringify([mockPerformers[i % mockPerformers.length]]),
+                            status: [10, 20, 30, 40][i % 4],
+                            master_incident_id: i % 5 === 0 ? 5263846 : null,
+                            pk: `{"key_${i}": "value_${i}_${Date.now()}"}`,
+                            bd_table: JSON.stringify([{
+                                id: 3028829 + i,
+                                name: `table_${i}_v${i%3}`,
+                                type: "Table",
+                                relation: { type: "INC_SOURCE", description: "" }
+                            }]),
+                            bd_table_attr: JSON.stringify([{
+                                id: 3028444 + i,
+                                name: `column_${i}`,
+                                type: "TableColumn",
+                                relation: { type: "INC_TABLE_COLUMN", description: "" }
+                            }]),
+                            comment: i % 4 === 0 ? `Комментарий к записи ${i}` : '',
+                            updatedAt: i % 3 === 0 ? null : `2025-12-${27 - Math.floor(i/5)}T${9 + i%8}:${15 + i%30}:00`
+                        });
+                    }
+                    
+                    errors.value = [...mockErrors, ...additionalErrors];
+                    applyFilters();
+                    showNotification('success', 'Данные загружены', 'Таблица успешно обновлена');
+                }
+
+                // Фильтрация
+                function applyFilters() {
+                    let result = [...errors.value];
+                    
+                    // Фильтр по PK
+                    if (filterPk.value) {
+                        const searchTerm = filterPk.value.toLowerCase();
+                        result = result.filter(error => 
+                            error.pk.toLowerCase().includes(searchTerm)
+                        );
+                    }
+                    
+                    // Фильтр по ID инцидента
+                    if (filterIncidentId.value) {
+                        const searchTerm = filterIncidentId.value;
+                        result = result.filter(error => 
+                            error.incident_id.toString().includes(searchTerm) ||
+                            (error.master_incident_id && error.master_incident_id.toString().includes(searchTerm))
+                        );
+                    }
+                    
+                    // Фильтр по ответственному
+                    if (filterExecutor.value) {
+                        const executorId = parseInt(filterExecutor.value);
+                        result = result.filter(error => {
+                            if (!error.executor_name) return false;
+                            const executors = parseJSON(error.executor_name);
+                            return executors.some(exec => exec.id === executorId);
+                        });
+                    }
+                    
+                    // Фильтр по исключению (DQ)
+                    if (filterException.value) {
+                        const dqId = parseInt(filterException.value);
+                        result = result.filter(error => error.dqimplementation_id === dqId);
+                    }
+                    
+                    // Фильтр по статусу
+                    if (filterStatus.value) {
+                        const statusValue = parseInt(filterStatus.value);
+                        result = result.filter(error => error.status === statusValue);
+                    }
+                    
+                    // Фильтр по таблице
+                    if (filterTable.value) {
+                        const tableId = parseInt(filterTable.value);
+                        result = result.filter(error => {
+                            if (!error.bd_table) return false;
+                            const tables = parseJSON(error.bd_table);
+                            return tables.some(table => table.id === tableId);
+                        });
+                    }
+                    
+                    // Фильтр по атрибуту
+                    if (filterAttr.value) {
+                        const attrId = parseInt(filterAttr.value);
+                        result = result.filter(error => {
+                            if (!error.bd_table_attr) return false;
+                            const attrs = parseJSON(error.bd_table_attr);
+                            return attrs.some(attr => attr.id === attrId);
+                        });
+                    }
+                    
+                    // Фильтр по комментарию
+                    if (filterComment.value) {
+                        const searchTerm = filterComment.value.toLowerCase();
+                        result = result.filter(error => 
+                            error.comment && error.comment.toLowerCase().includes(searchTerm)
+                        );
+                    }
+                    
+                    // Сортировка
+                    result.sort((a, b) => {
+                        let aValue, bValue;
+                        
+                        switch (sortField.value) {
+                            case 'executor_name':
+                                const aExec = parseJSON(a.executor_name);
+                                const bExec = parseJSON(b.executor_name);
+                                aValue = aExec.length > 0 ? aExec[0].name.toLowerCase() : '';
+                                bValue = bExec.length > 0 ? bExec[0].name.toLowerCase() : '';
+                                break;
+                            case 'bd_table':
+                                const aTable = parseJSON(a.bd_table);
+                                const bTable = parseJSON(b.bd_table);
+                                aValue = aTable.length > 0 ? aTable[0].name.toLowerCase() : '';
+                                bValue = bTable.length > 0 ? bTable[0].name.toLowerCase() : '';
+                                break;
+                            case 'bd_table_attr':
+                                const aAttr = parseJSON(a.bd_table_attr);
+                                const bAttr = parseJSON(b.bd_table_attr);
+                                aValue = aAttr.length > 0 ? aAttr[0].name.toLowerCase() : '';
+                                bValue = bAttr.length > 0 ? bAttr[0].name.toLowerCase() : '';
+                                break;
+                            case 'pk':
+                                aValue = a.pk.toLowerCase();
+                                bValue = b.pk.toLowerCase();
+                                break;
+                            default:
+                                aValue = a[sortField.value];
+                                bValue = b[sortField.value];
+                        }
+                        
+                        if (sortDirection.value === 'asc') {
+                            return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+                        } else {
+                            return bValue < aValue ? -1 : bValue > aValue ? 1 : 0;
+                        }
+                    });
+                    
+                    filteredErrors.value = result;
+                    currentPage.value = 1;
+                }
+
+                function clearFilters() {
+                    filterPk.value = '';
+                    filterIncidentId.value = '';
+                    filterExecutor.value = '';
+                    filterException.value = '';
+                    filterStatus.value = '';
+                    filterTable.value = '';
+                    filterAttr.value = '';
+                    filterComment.value = '';
+                    applyFilters();
+                }
+
+                function sortBy(field) {
+                    if (sortField.value === field) {
+                        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortField.value = field;
+                        sortDirection.value = 'asc';
+                    }
+                    applyFilters();
+                }
+
+                // Пагинация
+                function goToPage(page) {
+                    if (page < 1 || page > totalPages.value) return;
+                    currentPage.value = page;
+                }
+
+                function changePageSize() {
+                    currentPage.value = 1;
+                }
+
+                // Массовый выбор
+                function toggleSelectAllOnPage() {
+                    if (isAllSelectedOnPage.value) {
+                        paginatedErrors.value.forEach(error => {
+                            selectedErrorIds.value.delete(error.incident_id);
+                        });
+                    } else {
+                        paginatedErrors.value.forEach(error => {
+                            selectedErrorIds.value.add(error.incident_id);
+                        });
+                    }
+                }
+
+                function toggleErrorSelection(errorId) {
+                    if (selectedErrorIds.value.has(errorId)) {
+                        selectedErrorIds.value.delete(errorId);
+                    } else {
+                        selectedErrorIds.value.add(errorId);
+                    }
+                }
+
+                function isErrorSelected(errorId) {
+                    return selectedErrorIds.value.has(errorId);
+                }
+
+                function clearSelection() {
+                    selectedErrorIds.value.clear();
+                }
+
+                // Групповые операции
+                function bulkUpdateStatus(newStatus) {
+                    selectedErrors.value.forEach(error => {
+                        error.status = newStatus;
+                        error.updatedAt = new Date().toISOString();
+                    });
+                    
+                    showNotification('success', 'Статус обновлен', `Статус ${selectedErrors.value.length} записей изменен`);
+                    clearSelection();
+                }
+
+                function openBulkPerformerModal() {
+                    bulkPerformerSearch.value = '';
+                    bulkPerformerResults.value = [...mockPerformers];
+                    bulkSelectedPerformer.value = null;
+                    new bootstrap.Modal(document.getElementById('bulkPerformerModal')).show();
+                }
+
+                function searchBulkPerformer() {
+                    if (!bulkPerformerSearch.value.trim()) {
+                        bulkPerformerResults.value = [...mockPerformers];
+                        return;
+                    }
+                    
+                    const query = bulkPerformerSearch.value.toLowerCase();
+                    bulkPerformerResults.value = mockPerformers.filter(performer =>
+                        performer.name.toLowerCase().includes(query)
+                    );
+                }
+
+                function selectBulkPerformer(performer) {
+                    bulkSelectedPerformer.value = performer;
+                }
+
+                function applyBulkPerformer() {
+                    if (!bulkSelectedPerformer.value) return;
+                    
+                    selectedErrors.value.forEach(error => {
+                        error.executor_name = JSON.stringify([bulkSelectedPerformer.value]);
+                        error.updatedAt = new Date().toISOString();
+                    });
+                    
+                    bootstrap.Modal.getInstance(document.getElementById('bulkPerformerModal')).hide();
+                    showNotification('success', 'Ответственный назначен', 
+                        `${bulkSelectedPerformer.value.name} назначен на ${selectedErrors.value.length} записей`);
+                    clearSelection();
+                }
+
+                function openBulkCommentModal() {
+                    bulkComment.value = '';
+                    new bootstrap.Modal(document.getElementById('bulkCommentModal')).show();
+                }
+
+                function applyBulkComment() {
+                    if (!bulkComment.value.trim()) return;
+                    
+                    const timestamp = `[${new Date().toLocaleString('ru-RU')}] Групповой комментарий:`;
+                    
+                    selectedErrors.value.forEach(error => {
+                        error.comment = error.comment 
+                            ? `${error.comment}\n${timestamp}\n${bulkComment.value}`
+                            : `${timestamp}\n${bulkComment.value}`;
+                        error.updatedAt = new Date().toISOString();
+                    });
+                    
+                    bootstrap.Modal.getInstance(document.getElementById('bulkCommentModal')).hide();
+                    showNotification('success', 'Комментарий добавлен', 
+                        `Комментарий добавлен к ${selectedErrors.value.length} записям`);
+                    clearSelection();
+                }
+
+                // Просмотр полных данных
+                function showFullJson(json, title) {
+                    selectedJson.value = json;
+                    jsonModalTitle.value = title;
+                    new bootstrap.Modal(document.getElementById('jsonModal')).show();
+                }
+
+                function showFullError(error) {
+                    selectedJson.value = JSON.stringify(error, null, 2);
+                    jsonModalTitle.value = `Полные данные инцидента #${error.incident_id}`;
+                    new bootstrap.Modal(document.getElementById('jsonModal')).show();
+                }
+
+                async function copyJson(json) {
+                    try {
+                        await navigator.clipboard.writeText(json);
+                        showNotification('success', 'Скопировано', 'Данные скопированы в буфер обмена');
+                    } catch (err) {
+                        console.error('Ошибка копирования:', err);
+                        showNotification('danger', 'Ошибка', 'Не удалось скопировать данные');
+                    }
+                }
+
+                async function copyErrorId(errorId) {
+                    try {
+                        await navigator.clipboard.writeText(errorId.toString());
+                        showNotification('success', 'Скопировано', 'ID инцидента скопирован');
+                    } catch (err) {
+                        console.error('Ошибка копирования:', err);
+                        showNotification('danger', 'Ошибка', 'Не удалось скопировать ID');
+                    }
+                }
+
+                // Поиск исполнителей
+                let searchTimeout = null;
+                function debouncedSearch() {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        searchPerformers();
+                    }, 300);
+                }
+
+                function searchPerformers() {
+                    if (!searchQuery.value.trim()) {
+                        searchResults.value = [];
+                        return;
+                    }
+                    
+                    const query = searchQuery.value.toLowerCase();
+                    searchResults.value = mockPerformers.filter(performer =>
+                        performer.name.toLowerCase().includes(query)
+                    );
+                }
+
+                function selectPerformer(performer) {
+                    if (!selectedError.value) return;
+
+                    selectedError.value.executor_name = JSON.stringify([performer]);
+                    selectedError.value.updatedAt = new Date().toISOString();
+                    
+                    bootstrap.Modal.getInstance(document.getElementById('performerModal')).hide();
+                    showNotification('success', 'Успешно', `Ответственный ${performer.name} назначен`);
+                }
+
+                function openPerformerModal(error) {
+                    selectedError.value = error;
+                    searchQuery.value = '';
+                    searchResults.value = [];
+                    new bootstrap.Modal(document.getElementById('performerModal')).show();
+                }
+
+                // Обновление статуса и комментария
+                function updateStatus(error) {
+                    error.updatedAt = new Date().toISOString();
+                    showNotification('success', 'Статус обновлен', `Статус записи #${error.incident_id} изменен`);
+                }
+
+                function updateComment(error) {
+                    if (!error.comment.trim()) return;
+                    error.updatedAt = new Date().toISOString();
+                    showNotification('success', 'Комментарий сохранен', `Комментарий к записи #${error.incident_id} обновлен`);
+                }
+
+                // Ресайз колонок
+                function setupResizeListeners() {
+                    document.addEventListener('mousemove', handleResize);
+                    document.addEventListener('mouseup', stopResize);
+                }
+
+                function startResize(event, columnClass) {
+                    isResizing.value = true;
+                    currentResizeColumn.value = columnClass;
+                    startX.value = event.clientX;
+                    
+                    const column = document.querySelector(`.${columnClass}`);
+                    if (column) {
+                        startWidth.value = column.offsetWidth;
+                        column.classList.add('resizing');
+                    }
+                    
+                    event.preventDefault();
+                }
+
+                function handleResize(event) {
+                    if (!isResizing.value) return;
+                    
+                    const dx = event.clientX - startX.value;
+                    const column = document.querySelector(`.${currentResizeColumn.value}`);
+                    
+                    if (column) {
+                        const newWidth = Math.max(100, startWidth.value + dx);
+                        column.style.width = `${newWidth}px`;
+                        column.style.minWidth = `${newWidth}px`;
+                        column.style.maxWidth = `${newWidth}px`;
+                    }
+                }
+
+                function stopResize() {
+                    if (isResizing.value) {
+                        isResizing.value = false;
+                        const column = document.querySelector(`.${currentResizeColumn.value}`);
+                        if (column) {
+                            column.classList.remove('resizing');
+                        }
+                    }
+                }
+
+                function resetColumnWidth(columnClass) {
+                    const column = document.querySelector(`.${columnClass}`);
+                    if (column) {
+                        column.style.width = '';
+                        column.style.minWidth = '';
+                        column.style.maxWidth = '';
+                    }
+                }
+
+                // Уведомления
+                function showNotification(type, title, message) {
+                    notification.value = {
+                        show: true,
+                        type,
+                        title,
+                        message
+                    };
+                    
+                    setTimeout(() => {
+                        notification.value.show = false;
+                    }, 5000);
+                }
+
+                // Инициализация
+                loadMockData();
+
+                return {
+                    errors,
+                    filteredErrors,
+                    paginatedErrors,
+                    searchResults,
+                    searchQuery,
+                    selectedError,
+                    selectedJson,
+                    jsonModalTitle,
+                    selectedErrorIds,
+                    filterPk,
+                    filterIncidentId,
+                    filterExecutor,
+                    filterException,
+                    filterStatus,
+                    filterTable,
+                    filterAttr,
+                    filterComment,
+                    sortField,
+                    sortDirection,
+                    currentPage,
+                    pageSize,
+                    pageSizeOptions,
+                    totalPages,
+                    startItem,
+                    endItem,
+                    visiblePages,
+                    bulkPerformerSearch,
+                    bulkPerformerResults,
+                    bulkSelectedPerformer,
+                    bulkComment,
+                    statuses,
+                    notification,
+                    selectedErrors,
+                    isAllSelectedOnPage,
+                    hasCommonStatus,
+                    uniqueExecutors,
+                    uniqueTables,
+                    uniqueAttrs,
+                    uniqueDQ,
+                    parseJSON,
+                    formatDate,
+                    truncateJson,
+                    getStatusLabel,
+                    getStatusBadgeClass,
+                    loadMockData,
+                    applyFilters,
+                    clearFilters,
+                    sortBy,
+                    goToPage,
+                    changePageSize,
+                    toggleSelectAllOnPage,
+                    toggleErrorSelection,
+                    isErrorSelected,
+                    clearSelection,
+                    bulkUpdateStatus,
+                    openBulkPerformerModal,
+                    searchBulkPerformer,
+                    selectBulkPerformer,
+                    applyBulkPerformer,
+                    openBulkCommentModal,
+                    applyBulkComment,
+                    showFullJson,
+                    showFullError,
+                    copyJson,
+                    copyErrorId,
+                    debouncedSearch,
+                    searchPerformers,
+                    selectPerformer,
+                    openPerformerModal,
+                    updateStatus,
+                    updateComment,
+                    startResize,
+                    resetColumnWidth,
+                    showNotification
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

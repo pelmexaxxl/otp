@@ -134,6 +134,7 @@ body {
   overflow-y: hidden;
   margin-bottom: var(--spacing-lg);
   border: 1px solid var(--color-gray-medium);
+  display: block;
 }
 
 /* ==========================================
@@ -154,11 +155,10 @@ body {
   text-align: left;
   vertical-align: middle;
   position: relative;
-  overflow: hidden;
+  /*overflow: hidden;*/
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0; /* Позволяет ячейкам сжиматься */
-  max-width: 0; /* Главное: заставляет обрезать контент */
   user-select: none; /* Запрещаем выделение текста */
 }
 
@@ -260,7 +260,10 @@ th.sort-desc .sort-indicator::after {
 .checkbox-cell {
   text-align: center;
   vertical-align: middle;
-  width: 48px;
+  min-width: 38px;
+  max-width: none ;
+  white-space: nowrap;
+  width: 38px;
   padding: 0;
   position: sticky;
   left: 0;
