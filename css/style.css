@@ -390,7 +390,7 @@ th:has(> .resize-handle:hover) {
 }
 
 /* Modal */
-.modal-overlay {
+.custom-modal-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -401,11 +401,11 @@ th:has(> .resize-handle:hover) {
   padding: var(--spacing-md);
 }
 
-.modal-overlay.show {
+.custom-modal-overlay.show {
   display: flex;
 }
 
-.modal {
+.custom-modal {
   background: var(--color-white);
   border-radius: var(--border-radius);
   width: 100%;
@@ -416,7 +416,7 @@ th:has(> .resize-handle:hover) {
   border: 1px solid var(--color-gray-medium);
 }
 
-.modal-header {
+.custom-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -424,7 +424,7 @@ th:has(> .resize-handle:hover) {
   border-bottom: 1px solid var(--color-gray-medium);
 }
 
-.modal-header h3 {
+.custom-modal-header h3 {
   margin: 0;
   font-size: var(--font-size-lg);
 }
@@ -444,11 +444,11 @@ th:has(> .resize-handle:hover) {
   color: var(--color-black);
 }
 
-.modal-body {
+.custom-modal-body {
   padding: var(--spacing-lg);
 }
 
-.modal-footer {
+.custom-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);

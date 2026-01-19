@@ -198,17 +198,23 @@ const ApiClient = {
 // DATA TRANSFORMERS
 // ==========================================
 function transformServerData(serverData) {
-  return serverData.map(item => ({
-    id: item.pk || '',
-    owner: item.executor_name || '',
-    status: item.status || '',
-    masterIncident: item.master_incident_id || '',
-    exception: item.status ? '' : 'NO',
-    comment: '',
-    bd_table: '',
-    bd_table_attr: '',
-    checked: false
-  }));
+  return serverData.map(item => {
+    const rawPk = item.pk || '';
+    const id = Object.values(rawPk)[0] || '';
+
+    return {
+      id: item.incident_record_id,
+      pk: item.pk,
+      owner: item.executor_name || '',
+      status: item.status || '',
+      masterIncident: item.master_incident_id || '',
+      exception: item.status ? '' : 'NO',
+      comment: '',
+      bd_table: '',
+      bd_table_attr: '',
+      checked: false
+    }
+  });
 }
 
 // ==========================================
@@ -376,6 +382,14 @@ class ColumnResizer {
     });
   }
 
+  lockColumnWidths() {
+    const headers = this.table.querySelectorAll('thead tr:first-child th');
+    headers.forEach((th, idx) => {
+      const w = th.style.width || `${th.offsetWidth}px`;
+      document.documentElement.style.setProperty(`--col-w-${idx}`, w);
+    });
+  }
+
   reset() {
     const allCells = this.table.querySelectorAll('th, td');
     allCells.forEach(cell => {
@@ -406,7 +420,7 @@ const SortingManager = (() => {
       currentSort.asc = true;
     }
 
-    const columns = ['id', 'owner', 'exception', 'status', 'bd_table', 'bd_table_attr', 'comment'];
+    const columns = ['pk', 'owner', 'exception', 'status', 'bd_table', 'bd_table_attr', 'comment'];
     const key = columns[columnIndex - 1];
 
     return [...data].sort((a, b) => {
@@ -452,15 +466,23 @@ const FilterManager = (() => {
     const activeFilters = Object.entries(filters);
     if (activeFilters.length === 0) return data;
 
-    const columns = ['id', 'owner', 'exception', 'status', 'bd_table', 'bd_table_attr', 'comment'];
+    // !!! исправленный порядок колонок (pk вместо id) !!!
+    const columns = ['pk', 'owner', 'exception', 'status', 'bd_table', 'bd_table_attr', 'comment'];
 
-    return data.filter(item => {
+    console.log('Фильтры:', activeFilters); // ➜ сразу видим, что фильтруем
+
+    const result = data.filter(item => {
       return activeFilters.every(([colIndex, filterValue]) => {
         const key = columns[colIndex - 1];
-        const cellValue = String(item[key] || '').toLowerCase();
-        return cellValue.includes(filterValue);
+        const value = String(item[key] || '').toLowerCase();
+        const ok = value.includes(filterValue);
+        console.log(`  col=${colIndex} key=${key} filter="${filterValue}" value="${value}" match=${ok}`);
+        return ok;
       });
     });
+
+    console.log('До фильтра:', data.length, 'После:', result.length);
+    return result;
   }
 
   function clear() {
@@ -563,11 +585,10 @@ const UIComponents = {
           <input type="checkbox" class="row-checkbox select-checkbox" 
                  ${SelectionManager.getSelected().has(item.id) ? 'checked' : ''}>
         </td>
-        <td><div class="cell-text">${item.id}</div></td>
+        <td><div class="cell-text">${item.pk}</div></td>
         <td>
           <div class="owner-cell">
             <div class="cell-text owner-input">${item.owner}</div>
-            <button class="edit-btn" title="Редактировать">✎</button>
           </div>
         </td>
         <td><div class="cell-text">${item.exception}</div></td>
@@ -585,25 +606,26 @@ const UIComponents = {
   updateActionPanel() {
     const panel = document.getElementById('actionButtons');
     const countEl = document.getElementById('selectedCount');
-    console.log('panel exists:', !!panel, 'countEl exists:', !!countEl);
     const differentStatus = document.getElementById('differentStatus');
 
     if (!panel) return;
 
     const state = SelectionManager.getState();
-    console.log('updateActionPanel count=', state.count);
     const selectedIncidents = DataManager.getAll().filter(item => state.selectedIds.has(item.id));
     const statuses = new Set(selectedIncidents.map(i => i.status));
+    console.log(selectedIncidents)
     const hasSingleStatus = statuses.size === 1;
     const currentStatus = hasSingleStatus ? [...statuses][0] : null;
 
-    
+
 
     if (state.count > 0) {
       panel.style.display = 'block';
+      panel.classList.remove('hidden')
       countEl.textContent = state.count;
     } else {
       panel.style.display = 'none';
+      panel.classList.add('hidden')
       return;
     }
 
@@ -618,15 +640,58 @@ const UIComponents = {
     });
 
     if (differentStatus) differentStatus.style.display = 'none';
-
+    // "values": {
+    //   "10": "Новый/На редактировании",
+    //   "20": "В работе",
+    //   "30": "На согласовании",
+    //   "40": "На проверке",
+    //   "50": "На подтверждении",
+    //   "60": "Ожидает публикации",
+    //   "70": "Опубликован",
+    //   "90": "Новый/На редактировании",
+    //   "100": "Новый/На редактировании",
+    //   "101": "Анализ",
+    //   "102": "Переназначен",
+    //   "110": "Контроль описания",
+    //   "120": "На согласовании",
+    //   "130": "На утверждении ИБ",
+    //   "140": "Утверждён",
+    //   "222": "Согласование бизнес-владельца",
+    //   "505": "Архитектурное ревью",
+    //   "506": "Ожидает архитектурное ревью",
+    //   "510": "Аналитическое ревью",
+    //   "511": "Ожидает аналитическое ревью",
+    //   "520": "Разработка",
+    //   "525": "Ожидание разработки",
+    //   "530": "Тестирование",
+    //   "540": "Готово к выгрузке на прод",
+    //   "550": "Формирование DL/BL",
+    //   "605": "Согласование бизнес-владельца",
+    //   "610": "Контроль заполнения",
+    //   "615": "Архитектурное ревью",
+    //   "620": "Определение команды разработки",
+    //   "630": "Системный анализ",
+    //   "635": "Заполнение терминов",
+    //   "640": "Контроль заполнения терминов",
+    //   "650": "Контроль разработки",
+    //   "660": "Согласование разработки",
+    //   "670": "Описание связей и разработки",
+    //   "675": "Разработка и описание связей",
+    //   "680": "Контроль описания",
+    //   "685": "Доработка описания",
+    //   "1001": "Первичное архитектурное согласование",
+    //   "1002": "Согласование ИБ",
+    //   "1003": "Архитектурное согласование",
+    //   "6052": "Согласование бизнес-владельца"
+    // }
     if (hasSingleStatus) {
       const statusMap = {
         '10': 'statusNew',
-        'В анализе': 'statusInAnalysis',
-        'В работе': 'statusInWork',
-        'Переназначен': 'statusReassigned',
-        'В ожидании': 'statusWaiting',
-        'Ожидание': 'statusWaiting'
+        '101': 'statusInAnalysis',
+        '20': 'statusInWork',
+        '102': 'statusReassigned',
+        '30': 'statusWaiting',
+        '70': 'published'
       };
 
       const blockId = statusMap[currentStatus];
@@ -646,7 +711,8 @@ const UIComponents = {
     const info = PaginationManager.getPaginationInfo();
 
     if (info.totalPages <= 1) {
-      container.innerHTML = '';
+      // container.innerHTML = '';
+      container.style.display = 'none';
       return;
     }
 
@@ -720,12 +786,9 @@ const EventHandlers = {
     const checkbox = e.target;
     const row = checkbox.closest('tr');
     const id = row.dataset.id;
-    console.log('checkbox clicked, real id=»' + id + '«');
 
     SelectionManager.toggle(id);
     UIComponents.updateActionPanel();
-    console.log('checkbox clicked, id=', id);
-    console.log('updated, selected count=', SelectionManager.getState().count);
 
     if (checkbox.checked) {
       row.classList.add('selected');
@@ -753,22 +816,27 @@ const EventHandlers = {
   },
 
   handleFilterInput: Utils.debounce(function (e) {
+    console.log('handleFilterInput fired, value:', e.target.value);
     const input = e.target;
     const th = input.closest('th');
     if (!th) return;
 
     const colIndex = parseInt(th.dataset.col);
+    console.log('th:', th, 'colIndex:', colIndex);
     if (isNaN(colIndex)) return;
 
     FilterManager.set(colIndex, input.value);
 
+    // console.log('Filter col', colIndex, 'key=', key, 'value=', filterValue);
+    console.log('Before filter:', DataManager.getAll().length);
     const filtered = FilterManager.apply(DataManager.getAll());
+    console.log('After filter:', filtered.length);
     const sorted = SortingManager.sort(filtered, SortingManager.getState().index);
 
     // Сбрасываем пагинацию при изменении фильтра
     PaginationManager.init(sorted.length);
     const pageData = PaginationManager.getPageData(sorted);
-
+    window.columnResizer.lockColumnWidths();
     UIComponents.renderTable(pageData);
     UIComponents.renderPagination();
     EventHandlers.attachRowEventListeners();
@@ -840,7 +908,6 @@ const EventHandlers = {
     const selectedIds = Array.from(SelectionManager.getSelected());
     const selectedIncidents = DataManager.getAll().filter(item => selectedIds.includes(item.id));
 
-    console.log(`Action: ${action}`, selectedIncidents);
     alert(`Действие: ${action}\nВыбрано: ${selectedIncidents.length} инцидентов`);
   },
 
@@ -917,6 +984,7 @@ const ModalManager = (() => {
   function init() {
     elements = {
       modal: document.getElementById('editModal'),
+      modalOverlay: document.getElementById('editModal'),
       closeBtn: document.getElementById('modalClose'),
       cancelBtn: document.getElementById('btnCancel'),
       saveBtn: document.getElementById('btnSave'),
@@ -951,17 +1019,20 @@ const ModalManager = (() => {
     document.addEventListener('keydown', handleKeydown);
   }
 
+
   function open(incident) {
     if (!elements.modal) {
       console.error('Modal not initialized');
       return;
     }
-
     currentIncident = incident;
     elements.countModal.textContent = SelectionManager.getSelected().size;
     elements.ownerInput.value = incident.owner || '';
 
+    console.log('before add show – display:', getComputedStyle(elements.modal).display);
     elements.modal.classList.add('show');
+    elements.modalOverlay.classList.add('show');
+    console.log('after  add show – display:', getComputedStyle(elements.modal).display);
     elements.ownerInput.focus();
   }
 
@@ -969,6 +1040,7 @@ const ModalManager = (() => {
     if (!elements.modal) return;
 
     elements.modal.classList.remove('show');
+    elements.modalOverlay.classList.remove('show');
     currentIncident = null;
     suggestions = [];
     activeIndex = -1;
@@ -1104,6 +1176,22 @@ const App = {
       // Initialize components
       this.initializeComponents();
 
+      window.columnResizer.lockColumnWidths();
+
+      // Генерируем CSS-правила
+      const headers = document.querySelectorAll('#errorsTable thead th');
+      const style = document.createElement('style');
+      document.head.appendChild(style);
+      headers.forEach((_, idx) => {
+        style.sheet.insertRule(
+          `#errorsTable th:nth-child(${idx + 1}),
+     #errorsTable td:nth-child(${idx + 1}) {
+       width: var(--col-w-${idx}) !important;
+       max-width: var(--col-w-${idx}) !important;
+     }`
+        );
+      });
+
       // Attach event listeners
       this.attachEventListeners();
 
@@ -1115,7 +1203,7 @@ const App = {
         // Обновляем пагинацию
         PaginationManager.init(sorted.length);
         const pageData = PaginationManager.getPageData(sorted);
-        
+
         UIComponents.renderTable(pageData);
         UIComponents.renderPagination();
 
@@ -1135,7 +1223,7 @@ const App = {
   },
 
   initializeComponents() {
-    new ColumnResizer('errorsTable');
+    window.columnResizer = new ColumnResizer('errorsTable');
 
     document.querySelectorAll('th.sortable').forEach(th => {
       const indicator = document.createElement('span');
@@ -1161,6 +1249,9 @@ const App = {
       clearBtn.addEventListener('click', () => {
         SelectionManager.clear();
         UIComponents.updateActionPanel();
+        document.querySelector('#selectAll').checked = false;
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.table-row').forEach(tr => tr.classList.remove('selected'));
       });
     }
 
@@ -1179,7 +1270,7 @@ const App = {
       paginationContainer.addEventListener('click', EventHandlers.handlePaginationClick.bind(EventHandlers));
     }
 
-        // делегирование для динамических строк
+    // делегирование для динамических строк
     const table = document.getElementById('errorsTable');
 
     // чекбоксы
