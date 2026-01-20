@@ -78,7 +78,11 @@
                             </div>
                         </div>
                     </div>
-
+                    <!-- Батоны -->
+                    <button class="btn btn-outline-secondary" id="btnClearAllFilters">
+                        <span>Сбросить все фильтры</span>
+                        <span class="badge bg-danger ms-1" id="activeFiltersCount">0</span>
+                    </button>
                     <button class="btn" id="btnClearSelection">Очистить выбор</button>
                 </div>
             </div>
@@ -100,15 +104,33 @@
                         <th class="sortable" data-col="6">Атрибут таблицы</th> -->
                         <th class="sortable" data-col="7">Комментарий</th>
                         <th class="edit-btn-header"></th>
-                    </tr>
                     <tr class="filter-row">
                         <th class="checkbox-cell"></th>
                         <th data-col="1"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th data-col="2"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th data-col="3"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th data-col="4"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <!-- <th data-col="5"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th data-col="6"><input type="text" class="col-filter" placeholder="Фильтр..."></th> -->
+                        <th data-col="2">
+                            <div class="dropdown-filter">
+                                <input type="text" class="col-filter dropdown-filter-input"
+                                    placeholder="Выберите ответственных..." data-col="2" readonly>
+                                <div class="dropdown-filter-list hidden"></div>
+                                <button class="clear-filter-btn" data-col="2">×</button>
+                            </div>
+                        </th>
+                        <th data-col="3">
+                            <div class="dropdown-filter">
+                                <input type="text" class="col-filter dropdown-filter-input"
+                                    placeholder="Выберите исключения..." data-col="3" readonly>
+                                <div class="dropdown-filter-list hidden"></div>
+                                <button class="clear-filter-btn" data-col="3">×</button>
+                            </div>
+                        </th>
+                        <th data-col="4">
+                            <div class="dropdown-filter">
+                                <input type="text" class="col-filter dropdown-filter-input"
+                                    placeholder="Выберите статусы..." data-col="4" readonly>
+                                <div class="dropdown-filter-list hidden"></div>
+                                <button class="clear-filter-btn" data-col="4">×</button>
+                            </div>
+                        </th>
                         <th data-col="7"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
                         <th></th>
                     </tr>
