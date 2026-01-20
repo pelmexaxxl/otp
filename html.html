@@ -99,7 +99,7 @@
                         <!-- <th class="sortable" data-col="5">Таблица</th>
                         <th class="sortable" data-col="6">Атрибут таблицы</th> -->
                         <th class="sortable" data-col="7">Комментарий</th>
-                        <th></th>
+                        <th class="edit-btn-header"></th>
                     </tr>
                     <tr class="filter-row">
                         <th class="checkbox-cell"></th>
@@ -185,6 +185,26 @@
                 <div class="custom-modal-footer">
                     <button class="btn btn-cancel" id="btnCancel">Отмена</button>
                     <button class="btn btn-primary" id="btnSave">Сохранить изменения</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View ID Modal -->
+        <div id="viewIdModal" class="custom-modal-overlay">
+            <div class="custom-modal view-id-modal">
+                <div class="custom-modal-header">
+                    <h3>Идентификатор ошибочной записи</h3>
+                    <button class="modal-close" id="viewIdModalClose">&times;</button>
+                </div>
+                <div class="custom-modal-body">
+                    <div class="form-group">
+                        <label>Полный текст:</label>
+                        <div id="idContent" class="id-content"></div>
+                    </div>
+                </div>
+                <div class="custom-modal-footer">
+                    <button class="btn btn-cancel" id="btnCopyId">Копировать</button>
+                    <button class="btn btn-primary" id="btnCloseViewId">Закрыть</button>
                 </div>
             </div>
         </div>

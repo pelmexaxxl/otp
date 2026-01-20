@@ -40,16 +40,19 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
-  padding: 0; /* Убрал отступы */
+  padding: 0;
+  /* Убрал отступы */
   background-color: var(--color-gray-light);
-  overflow-x: hidden; /* Предотвращаем горизонтальный скролл страницы */
+  overflow-x: hidden;
+  /* Предотвращаем горизонтальный скролл страницы */
 }
 
 /* ==========================================
    Layout
    ========================================== */
 #app {
-  width: 100vw; /* Полная ширина окна */
+  width: 100vw;
+  /* Полная ширина окна */
   min-height: 100vh;
   padding: var(--spacing-lg);
 }
@@ -57,13 +60,14 @@ body {
 /* ==========================================
    Loading & Error States
    ========================================== */
-.loading-state, .error-state {
+.loading-state,
+.error-state {
   text-align: center;
   padding: 40px;
   background: var(--color-white);
   border-radius: var(--border-radius);
   margin-bottom: var(--spacing-md);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   width: 100%;
 }
 
@@ -84,13 +88,21 @@ body {
   background: var(--color-white);
   padding: var(--spacing-md) var(--spacing-lg);
   border-radius: var(--border-radius);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--spacing-md);
   width: 100%;
+  transition: all 0.3s ease;
+  opacity: 1;
+}
+
+.action-panel.hidden {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
 }
 
 .action-panel-header {
@@ -129,8 +141,9 @@ body {
   width: 100%;
   background: var(--color-white);
   border-radius: var(--border-radius);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  overflow-x: auto; /* Горизонтальная прокрутка при необходимости */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+  /* Горизонтальная прокрутка при необходимости */
   overflow-y: hidden;
   margin-bottom: var(--spacing-lg);
   border: 1px solid var(--color-gray-medium);
@@ -143,13 +156,15 @@ body {
 .table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: auto; /* Автоматическая ширина колонок */
-  min-width: 0; /* Убираем фиксированную минимальную ширину */
+  table-layout: auto;
+  /* Автоматическая ширина колонок */
+  min-width: 0;
+  /* Убираем фиксированную минимальную ширину */
   margin: 0;
 }
 
 .table th,
-  .table td {
+.table td {
   padding: var(--spacing-md) var(--spacing-lg);
   border: none;
   text-align: left;
@@ -158,8 +173,10 @@ body {
   /*overflow: hidden;*/
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0; /* Позволяет ячейкам сжиматься */
-  user-select: none; /* Запрещаем выделение текста */
+  min-width: 0;
+  /* Позволяет ячейкам сжиматься */
+  user-select: none;
+  /* Запрещаем выделение текста */
 }
 
 .table thead {
@@ -176,7 +193,8 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
   border-bottom: 2px solid var(--color-gray-medium);
-  pointer-events: none; /* Отключаем события на th */
+  pointer-events: none;
+  /* Отключаем события на th */
 }
 
 .table th.sortable {
@@ -261,7 +279,7 @@ th.sort-desc .sort-indicator::after {
   text-align: center;
   vertical-align: middle;
   min-width: 38px;
-  max-width: none ;
+  max-width: none;
   white-space: nowrap;
   width: 38px;
   padding: 0;
@@ -361,10 +379,12 @@ th.sort-desc .sort-indicator::after {
   width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: 100; /* Увеличиваем z-index */
+  z-index: 100;
+  /* Увеличиваем z-index */
   background: transparent;
   transition: background-color 0.2s;
-  pointer-events: auto; /* Включаем pointer-events */
+  pointer-events: auto;
+  /* Включаем pointer-events */
 }
 
 .resize-handle:hover {
@@ -376,7 +396,7 @@ th.sort-desc .sort-indicator::after {
 }
 
 /* Убираем hover эффект у th при наведении на resize-handle */
-.resize-handle:hover ~ * {
+.resize-handle:hover~* {
   pointer-events: none;
 }
 
@@ -519,7 +539,10 @@ th:has(> .resize-handle:hover) {
 }
 
 /* Utilities */
-.hidden { display: none !important; }
+.hidden {
+  display: none !important;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -539,7 +562,7 @@ th:has(> .resize-handle:hover) {
   padding: var(--spacing-md);
   background: var(--color-white);
   border-radius: var(--border-radius);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--color-gray-medium);
 }
 
@@ -598,33 +621,155 @@ th:has(> .resize-handle:hover) {
   #app {
     padding: var(--spacing-sm);
   }
-  
+
   .table {
-    min-width: 0; /* Убираем фиксированную минимальную ширину */
+    min-width: 0;
+    /* Убираем фиксированную минимальную ширину */
   }
-  
+
   .table th,
   .table td {
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: var(--font-size-sm);
   }
-  
+
   .action-panel {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .status-actions {
     width: 100%;
     justify-content: flex-start;
   }
-  
+
   .btn {
     width: 100%;
     text-align: center;
   }
-  
+
   .modal {
     max-width: 95%;
   }
+}
+
+/* View ID Modal */
+.view-id-modal {
+  max-width: 600px;
+}
+
+.id-content {
+  padding: var(--spacing-md);
+  background-color: var(--color-gray-light);
+  border: 1px solid var(--color-gray-medium);
+  border-radius: var(--border-radius);
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.btn-copy {
+  background-color: var(--color-success);
+  color: var(--color-white);
+  border: none;
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.btn-copy:hover {
+  background-color: #45a049;
+}
+
+.btn-copy.copied {
+  background-color: var(--color-primary);
+}
+
+/* Make ID cells clickable */
+.table td:nth-child(2) .cell-text {
+  cursor: pointer;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+
+.table td:nth-child(2) .cell-text:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+#selectAll:indeterminate {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Стили для колонки с кнопкой редактирования */
+.edit-btn-header {
+    width: 40px !important; /* Минимальная ширина */
+    min-width: 40px !important;
+    max-width: 40px !important;
+    padding: 0 !important;
+    text-align: center;
+}
+
+.edit-btn-cell {
+    width: 40px !important; /* Минимальная ширина */
+    min-width: 40px !important;
+    max-width: 40px !important;
+    padding: 0 !important;
+    text-align: center;
+    vertical-align: middle;
+    position: sticky; /* Если нужно зафиксировать справа */
+    right: 0;
+    background: inherit;
+    z-index: 5;
+}
+
+/* Для фиксации кнопки справа при горизонтальном скролле */
+.table thead th.edit-btn-header {
+    z-index: 15;
+    background-color: var(--bs-table-bg);
+    position: sticky;
+    right: 0;
+}
+
+/* Убедитесь, что кнопка влезает */
+.edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--color-primary);
+    padding: 8px;
+    line-height: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+    min-height: 36px; /* Минимальная высота для удобного клика */
+}
+
+.edit-btn:hover {
+    color: var(--color-primary-hover);
+    background-color: rgba(24, 144, 255, 0.1);
+    border-radius: 4px;
+}
+
+/* Чтобы не было горизонтального скролла если только эта колонка не фиксирована */
+.edit-btn-header:last-child,
+.edit-btn-cell:last-child {
+    border-right: none;
+}
+
+/* Альтернативный вариант: сделать всю ячейку кликабельной */
+.edit-btn-cell .edit-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
 }

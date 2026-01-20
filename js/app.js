@@ -112,10 +112,23 @@ const DataManager = (() => {
 })();
 
 // ==========================================
-// SELECTION MANAGER
+// SELECTION MANAGER (ОБНОВЛЕННЫЙ)
 // ==========================================
 const SelectionManager = (() => {
   const selectedIds = new Set();
+  const subscribers = [];
+
+  function subscribe(callback) {
+    subscribers.push(callback);
+    return () => {
+      const index = subscribers.indexOf(callback);
+      if (index > -1) subscribers.splice(index, 1);
+    };
+  }
+
+  function notify() {
+    subscribers.forEach(callback => callback(getState()));
+  }
 
   function toggle(id) {
     if (selectedIds.has(id)) {
@@ -123,6 +136,7 @@ const SelectionManager = (() => {
     } else {
       selectedIds.add(id);
     }
+    notify();
     return getState();
   }
 
@@ -132,11 +146,13 @@ const SelectionManager = (() => {
     } else {
       selectedIds.clear();
     }
+    notify();
     return getState();
   }
 
   function clear() {
     selectedIds.clear();
+    notify();
     return getState();
   }
 
@@ -152,6 +168,7 @@ const SelectionManager = (() => {
   }
 
   return {
+    subscribe,
     toggle,
     setAll,
     clear,
@@ -247,7 +264,7 @@ class ColumnResizer {
   }
 
   addResizeHandles() {
-    const headers = this.table.querySelectorAll('thead tr:first-child th:not(.checkbox-cell)');
+    const headers = this.table.querySelectorAll('thead tr:first-child th:not(.checkbox-cell):not(.edit-btn-header)');
     headers.forEach(header => {
       const handle = document.createElement('div');
       handle.className = 'resize-handle';
@@ -578,14 +595,20 @@ const UIComponents = {
     const tbody = document.querySelector('#errorsTable tbody');
     if (!tbody) return;
 
+    const selectedIds = SelectionManager.getSelected();
+
     tbody.innerHTML = data.map(item => `
-      <tr class="table-row ${SelectionManager.getSelected().has(item.id) ? 'selected' : ''}" 
+      <tr class="table-row ${selectedIds.has(item.id) ? 'selected' : ''}" 
           data-id="${item.id}">
         <td class="checkbox-cell">
           <input type="checkbox" class="row-checkbox select-checkbox" 
-                 ${SelectionManager.getSelected().has(item.id) ? 'checked' : ''}>
+                 ${selectedIds.has(item.id) ? 'checked' : ''}>
         </td>
-        <td><div class="cell-text">${item.pk}</div></td>
+        <td>
+            <div class="cell-text" title="Кликните для просмотра полного текста">
+                ${item.pk}
+            </div>
+        </td>
         <td>
           <div class="owner-cell">
             <div class="cell-text owner-input">${item.owner}</div>
@@ -593,12 +616,12 @@ const UIComponents = {
         </td>
         <td><div class="cell-text">${item.exception}</div></td>
         <td><div class="cell-text">${item.status}</div></td>
-        <td><div class="cell-text">${item.bd_table}</div></td>
-        <td><div class="cell-text">${item.bd_table_attr}</div></td>
+        <!-- <td><div class="cell-text">${item.bd_table}</div></td>
+        <td><div class="cell-text">${item.bd_table_attr}</div></td> -->
         <td>
           ${item.comment ? `<textarea class="cell-text comment-field" readonly>${item.comment}</textarea>` : ''}
         </td>
-        <td><button class="edit-btn" title="Редактировать">✎</button></td>
+        <td class="edit-btn-cell"><button class="edit-btn" title="Редактировать">✎</button></td>
       </tr>
     `).join('');
   },
@@ -608,27 +631,36 @@ const UIComponents = {
     const countEl = document.getElementById('selectedCount');
     const differentStatus = document.getElementById('differentStatus');
 
-    if (!panel) return;
+    if (!panel) {
+      console.warn('Action panel not found');
+      return;
+    }
 
     const state = SelectionManager.getState();
     const selectedIncidents = DataManager.getAll().filter(item => state.selectedIds.has(item.id));
     const statuses = new Set(selectedIncidents.map(i => i.status));
-    console.log(selectedIncidents)
     const hasSingleStatus = statuses.size === 1;
     const currentStatus = hasSingleStatus ? [...statuses][0] : null;
 
+    console.log('Updating action panel:', {
+      selectedCount: state.count,
+      statuses: [...statuses],
+      hasSingleStatus,
+      currentStatus
+    });
 
-
+    // Показываем/скрываем панель
     if (state.count > 0) {
       panel.style.display = 'block';
-      panel.classList.remove('hidden')
+      panel.classList.remove('hidden');
       countEl.textContent = state.count;
     } else {
       panel.style.display = 'none';
-      panel.classList.add('hidden')
+      panel.classList.add('hidden');
       return;
     }
 
+    // Скрываем все блоки статусов
     const statusBlocks = [
       'statusNew', 'statusInAnalysis', 'statusInWork',
       'statusReassigned', 'statusWaiting'
@@ -640,51 +672,9 @@ const UIComponents = {
     });
 
     if (differentStatus) differentStatus.style.display = 'none';
-    // "values": {
-    //   "10": "Новый/На редактировании",
-    //   "20": "В работе",
-    //   "30": "На согласовании",
-    //   "40": "На проверке",
-    //   "50": "На подтверждении",
-    //   "60": "Ожидает публикации",
-    //   "70": "Опубликован",
-    //   "90": "Новый/На редактировании",
-    //   "100": "Новый/На редактировании",
-    //   "101": "Анализ",
-    //   "102": "Переназначен",
-    //   "110": "Контроль описания",
-    //   "120": "На согласовании",
-    //   "130": "На утверждении ИБ",
-    //   "140": "Утверждён",
-    //   "222": "Согласование бизнес-владельца",
-    //   "505": "Архитектурное ревью",
-    //   "506": "Ожидает архитектурное ревью",
-    //   "510": "Аналитическое ревью",
-    //   "511": "Ожидает аналитическое ревью",
-    //   "520": "Разработка",
-    //   "525": "Ожидание разработки",
-    //   "530": "Тестирование",
-    //   "540": "Готово к выгрузке на прод",
-    //   "550": "Формирование DL/BL",
-    //   "605": "Согласование бизнес-владельца",
-    //   "610": "Контроль заполнения",
-    //   "615": "Архитектурное ревью",
-    //   "620": "Определение команды разработки",
-    //   "630": "Системный анализ",
-    //   "635": "Заполнение терминов",
-    //   "640": "Контроль заполнения терминов",
-    //   "650": "Контроль разработки",
-    //   "660": "Согласование разработки",
-    //   "670": "Описание связей и разработки",
-    //   "675": "Разработка и описание связей",
-    //   "680": "Контроль описания",
-    //   "685": "Доработка описания",
-    //   "1001": "Первичное архитектурное согласование",
-    //   "1002": "Согласование ИБ",
-    //   "1003": "Архитектурное согласование",
-    //   "6052": "Согласование бизнес-владельца"
-    // }
-    if (hasSingleStatus) {
+
+    // Показываем соответствующий блок
+    if (hasSingleStatus && currentStatus) {
       const statusMap = {
         '10': 'statusNew',
         '101': 'statusInAnalysis',
@@ -695,12 +685,20 @@ const UIComponents = {
       };
 
       const blockId = statusMap[currentStatus];
+      console.log('Looking for block:', currentStatus, '->', blockId);
+
       if (blockId) {
         const block = document.getElementById(blockId);
-        if (block) block.style.display = 'block';
+        if (block) {
+          console.log('Showing block:', blockId);
+          block.style.display = 'block';
+        }
       }
-    } else {
-      if (differentStatus) differentStatus.style.display = 'block';
+    } else if (state.count > 1) {
+      if (differentStatus) {
+        console.log('Showing different status warning');
+        differentStatus.style.display = 'block';
+      }
     }
   },
 
@@ -775,8 +773,141 @@ const UIComponents = {
     `;
 
     container.innerHTML = `<div class="pagination">${pages.join('')}${infoText}</div>`;
+  },
+
+  forceUpdateActionPanel() {
+    console.log('Forcing action panel update');
+    this.updateActionPanel();
   }
 };
+
+// ==========================================
+// VIEW ID MODAL MANAGER
+// ==========================================
+const ViewIdModalManager = (() => {
+  let elements = {};
+  let currentContent = '';
+
+  function init() {
+    elements = {
+      modal: document.getElementById('viewIdModal'),
+      closeBtn: document.getElementById('viewIdModalClose'),
+      cancelBtn: document.getElementById('btnCloseViewId'),
+      copyBtn: document.getElementById('btnCopyId'),
+      contentEl: document.getElementById('idContent')
+    };
+
+    if (!elements.modal) {
+      console.warn('View ID modal elements not found');
+      return false;
+    }
+
+    attachEventListeners();
+    return true;
+  }
+
+  function attachEventListeners() {
+    elements.closeBtn.addEventListener('click', close);
+    elements.cancelBtn.addEventListener('click', close);
+    elements.copyBtn.addEventListener('click', copyToClipboard);
+    elements.modal.addEventListener('click', (e) => {
+      if (e.target === elements.modal) close();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && elements.modal.classList.contains('show')) {
+        close();
+      }
+    });
+  }
+
+  function open(content) {
+    if (!elements.modal) return;
+
+    currentContent = content;
+    elements.contentEl.textContent = content;
+    elements.modal.classList.add('show');
+    elements.copyBtn.textContent = 'Копировать';
+    elements.copyBtn.classList.remove('copied');
+  }
+
+  function close() {
+    if (!elements.modal) return;
+
+    elements.modal.classList.remove('show');
+    currentContent = '';
+  }
+
+  async function copyToClipboard() {
+    if (!currentContent) return;
+
+    try {
+      await navigator.clipboard.writeText(currentContent);
+
+      // Визуальная обратная связь
+      elements.copyBtn.textContent = 'Скопировано!';
+      elements.copyBtn.classList.add('copied');
+
+      setTimeout(() => {
+        if (elements.copyBtn) {
+          elements.copyBtn.textContent = 'Копировать';
+          elements.copyBtn.classList.remove('copied');
+        }
+      }, 2000);
+
+    } catch (err) {
+      console.error('Failed to copy:', err);
+
+      // Fallback для старых браузеров
+      const textArea = document.createElement('textarea');
+      textArea.value = currentContent;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          elements.copyBtn.textContent = 'Скопировано!';
+          elements.copyBtn.classList.add('copied');
+
+          setTimeout(() => {
+            if (elements.copyBtn) {
+              elements.copyBtn.textContent = 'Копировать';
+              elements.copyBtn.classList.remove('copied');
+            }
+          }, 2000);
+        } else {
+          elements.copyBtn.textContent = 'Ошибка копирования';
+          setTimeout(() => {
+            if (elements.copyBtn) {
+              elements.copyBtn.textContent = 'Копировать';
+            }
+          }, 2000);
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback copy failed:', fallbackErr);
+        elements.copyBtn.textContent = 'Ошибка';
+        setTimeout(() => {
+          if (elements.copyBtn) {
+            elements.copyBtn.textContent = 'Копировать';
+          }
+        }, 2000);
+      } finally {
+        document.body.removeChild(textArea);
+      }
+    }
+  }
+
+  return {
+    init,
+    open,
+    close
+  };
+})();
 
 // ==========================================
 // EVENT HANDLERS
@@ -785,10 +916,13 @@ const EventHandlers = {
   handleCheckboxChange(e) {
     const checkbox = e.target;
     const row = checkbox.closest('tr');
+
+    if (!row) return;
+
     const id = row.dataset.id;
 
     SelectionManager.toggle(id);
-    UIComponents.updateActionPanel();
+    // UIComponents.updateActionPanel(); будет вызвано через подписку
 
     if (checkbox.checked) {
       row.classList.add('selected');
@@ -797,13 +931,42 @@ const EventHandlers = {
       const selectAll = document.getElementById('selectAll');
       if (selectAll) selectAll.checked = false;
     }
+    // Обновляем "Выбрать все"
+    this.updateSelectAllCheckbox();
+  },
+
+  handleIdCellClick(e) {
+    const cell = e.target.closest('td');
+    const row = e.target.closest('tr');
+
+    if (!cell || !row) return;
+
+    // Проверяем, что это ячейка с идентификатором (вторая колонка)
+    const cellIndex = Array.from(row.cells).indexOf(cell);
+    if (cellIndex !== 1) return; // 1 - это вторая колонка (нумерация с 0)
+
+    // Получаем полный текст из data-атрибута или из ячейки
+    const incidentId = row.dataset.id;
+    const incident = DataManager.getAll().find(item => item.id === incidentId);
+
+    if (incident && incident.pk) {
+      ViewIdModalManager.open(incident.pk);
+    } else {
+      // Если нет в данных, берем из ячейки
+      const content = cell.querySelector('.cell-text')?.textContent || '';
+      if (content.trim()) {
+        ViewIdModalManager.open(content);
+      }
+    }
   },
 
   handleSelectAll(e) {
     const checked = e.target.checked;
-    const ids = DataManager.getAll().map(item => item.id);
+    const allData = DataManager.getAll();
+    const ids = allData.map(item => item.id);
     SelectionManager.setAll(ids, checked);
 
+    // Обновляем визуальное состояние
     document.querySelectorAll('.row-checkbox').forEach(cb => {
       cb.checked = checked;
     });
@@ -812,7 +975,10 @@ const EventHandlers = {
       row.classList.toggle('selected', checked);
     });
 
-    UIComponents.updateActionPanel();
+    // Сбрасываем indeterminate состояние
+    e.target.indeterminate = false;
+
+    // UIComponents.updateActionPanel(); будет вызвано через подписку
   },
 
   handleFilterInput: Utils.debounce(function (e) {
@@ -839,7 +1005,9 @@ const EventHandlers = {
     window.columnResizer.lockColumnWidths();
     UIComponents.renderTable(pageData);
     UIComponents.renderPagination();
-    EventHandlers.attachRowEventListeners();
+    // UIComponents.updateActionPanel();
+    UIComponents.forceUpdateActionPanel();
+
   }, CONFIG.DEBOUNCE_DELAY),
 
   handlePaginationClick(e) {
@@ -868,7 +1036,9 @@ const EventHandlers = {
 
     UIComponents.renderTable(pageData);
     UIComponents.renderPagination();
-    EventHandlers.attachRowEventListeners();
+    // UIComponents.updateActionPanel();
+    UIComponents.forceUpdateActionPanel();
+
   },
 
   handleHeaderClick(e) {
@@ -891,7 +1061,8 @@ const EventHandlers = {
 
     UIComponents.renderTable(pageData);
     UIComponents.renderPagination();
-    EventHandlers.attachRowEventListeners();
+    // UIComponents.updateActionPanel();
+    UIComponents.forceUpdateActionPanel();
 
     // 4. Визуальный индикатор
     document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
@@ -956,6 +1127,25 @@ const EventHandlers = {
     });
   },
 
+  updateSelectAllCheckbox() {
+    const selectAll = document.getElementById('selectAll');
+    if (!selectAll) return;
+
+    const allRows = DataManager.getAll();
+    const selectedCount = SelectionManager.getState().count;
+
+    if (selectedCount === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    } else if (selectedCount === allRows.length) {
+      selectAll.checked = true;
+      selectAll.indeterminate = false;
+    } else {
+      selectAll.checked = false;
+      selectAll.indeterminate = true;
+    }
+  },
+
   attachRowEventListeners() {
     document.querySelectorAll('.row-checkbox').forEach(cb => {
       cb.removeEventListener('change', this.handleCheckboxChange);
@@ -965,6 +1155,12 @@ const EventHandlers = {
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.removeEventListener('click', this.handleEditClick);
       btn.addEventListener('click', this.handleEditClick);
+    });
+
+    // Добавляем обработчики для ячеек с ID
+    document.querySelectorAll('#errorsTable td:nth-child(2) .cell-text').forEach(cell => {
+      cell.removeEventListener('click', this.handleIdCellClick);
+      cell.addEventListener('click', this.handleIdCellClick);
     });
   }
 };
@@ -1157,8 +1353,13 @@ const App = {
     try {
       // Initialize modal first
       const modalInitialized = ModalManager.init();
+      const viewIdModalInitialized = ViewIdModalManager.init();
+
       if (!modalInitialized) {
-        console.warn('Modal initialization failed, some features may not work');
+        console.warn('Edit modal initialization failed');
+      }
+      if (!viewIdModalInitialized) {
+        console.warn('View ID modal initialization failed');
       }
 
       // Load data
@@ -1172,6 +1373,17 @@ const App = {
       // Initial render
       UIComponents.renderTable(pageData);
       UIComponents.renderPagination();
+
+      SelectionManager.subscribe((selectionState) => {
+        console.log('Selection changed:', selectionState);
+        UIComponents.updateActionPanel();
+        EventHandlers.updateSelectAllCheckbox();
+      });
+
+      // Принудительное обновление панели при начальной загрузке
+      setTimeout(() => {
+        UIComponents.forceUpdateActionPanel();
+      }, 100);
 
       // Initialize components
       this.initializeComponents();
@@ -1200,19 +1412,20 @@ const App = {
         const filtered = FilterManager.apply(newData);
         const sorted = SortingManager.sort(filtered, SortingManager.getState().index);
 
-        // Обновляем пагинацию
         PaginationManager.init(sorted.length);
         const pageData = PaginationManager.getPageData(sorted);
 
         UIComponents.renderTable(pageData);
         UIComponents.renderPagination();
+        UIComponents.updateActionPanel();
 
         if (window.columnResizer) {
           window.columnResizer.loadSavedWidths();
         }
 
-        this.attachRowEventListeners();
-        UIComponents.updateActionPanel();
+        // Обновляем чекбокс "Выбрать все"
+        EventHandlers.updateSelectAllCheckbox();
+        // this.attachRowEventListeners(); используем делегирование
       });
 
       console.log('Application initialized successfully');
@@ -1234,16 +1447,22 @@ const App = {
   },
 
   attachEventListeners() {
+    const table = document.getElementById('errorsTable');
+
+    // Обработка "Выбрать все"
     const selectAll = document.getElementById('selectAll');
     if (selectAll) {
       selectAll.addEventListener('change', EventHandlers.handleSelectAll.bind(EventHandlers));
     }
 
-    const actionButtons = document.getElementById('actionButtons');
-    if (actionButtons) {
-      actionButtons.addEventListener('click', EventHandlers.handleActionClick.bind(EventHandlers));
-    }
+    // Делегирование обработки кнопок панели действий
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#actionButtons button[data-action]')) {
+        EventHandlers.handleActionClick(e);
+      }
+    });
 
+    // Кнопка "Очистить выбор"
     const clearBtn = document.getElementById('btnClearSelection');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
@@ -1255,44 +1474,47 @@ const App = {
       });
     }
 
+    // Фильтры
     document.querySelectorAll('.col-filter').forEach(input => {
       input.addEventListener('input', EventHandlers.handleFilterInput.bind(EventHandlers));
     });
 
+    // Заголовки сортировки
     document.querySelectorAll('th.sortable').forEach(th => {
       th.addEventListener('click', EventHandlers.handleHeaderClick.bind(EventHandlers));
-
     });
 
-    // Обработчик пагинации
+    // Пагинация
     const paginationContainer = document.getElementById('paginationContainer');
     if (paginationContainer) {
       paginationContainer.addEventListener('click', EventHandlers.handlePaginationClick.bind(EventHandlers));
     }
 
-    // делегирование для динамических строк
-    const table = document.getElementById('errorsTable');
+    // ДЕЛЕГИРОВАНИЕ НА САМОЙ ТАБЛИЦЕ для чекбоксов
+    if (table) {
+      // Чекбоксы строк (делегирование на таблице)
+      table.addEventListener('change', (e) => {
+        if (e.target.classList.contains('row-checkbox')) {
+          EventHandlers.handleCheckboxChange(e);
+        }
+      });
 
-    // чекбоксы
-    table.addEventListener('change', e => {
-      if (e.target.classList.contains('row-checkbox')) {
-        EventHandlers.handleCheckboxChange(e);
-      }
-    });
+      // Клики на таблице
+      table.addEventListener('click', (e) => {
+        // Кнопки редактирования
+        if (e.target.classList.contains('edit-btn')) {
+          EventHandlers.handleEditClick(e);
+        }
 
-    // кнопки редактирования
-    table.addEventListener('click', e => {
-      if (e.target.classList.contains('edit-btn')) {
-        EventHandlers.handleEditClick(e);
-      }
-    });
+        // Ячейки с ID (вторая колонка)
+        if (e.target.closest('td:nth-child(2) .cell-text')) {
+          EventHandlers.handleIdCellClick(e);
+        }
+      });
+    }
 
-    /* убираем старый прямой вызов
-       EventHandlers.attachRowEventListeners(); */
-  },
-
-  attachRowEventListeners() {
-    EventHandlers.attachRowEventListeners();
+    // Удаляем старое делегирование на document для change
+    // document.addEventListener('change', (e) => { ... })
   },
 
   showError(message) {
