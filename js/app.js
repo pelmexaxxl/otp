@@ -1077,9 +1077,90 @@ const EventHandlers = {
 
     const action = btn.dataset.action;
     const selectedIds = Array.from(SelectionManager.getSelected());
-    const selectedIncidents = DataManager.getAll().filter(item => selectedIds.includes(item.id));
 
-    alert(`Действие: ${action}\nВыбрано: ${selectedIncidents.length} инцидентов`);
+    if (selectedIds.length === 0) {
+      alert('Пожалуйста, выберите хотя бы один инцидент');
+      return;
+    }
+
+    // Открываем модалку для ввода комментария
+    CommentModalManager.open(
+      action,
+      selectedIds.length,
+      (actionType, comment) => {
+        // Этот callback будет вызван после подтверждения
+        this.executeAction(actionType, comment, selectedIds);
+      }
+    );
+  },
+
+  executeAction(action, comment, selectedIds) {
+    console.log(`Действие: ${action}`);
+    console.log(`Комментарий: ${comment}`);
+    console.log(`Выбрано инцидентов: ${selectedIds.length}`);
+
+    // Здесь реализуйте логику для каждого действия
+    const updates = {};
+
+    // Определяем обновления в зависимости от действия
+    switch (action) {
+      case 'status-new':
+        updates.status = '101'; // В анализе
+        break;
+      case 'to-exception':
+        updates.exception = 'YES';
+        break;
+      case 'analysis-to-work':
+        updates.status = '20'; // В работе
+        break;
+      case 'close':
+        updates.status = '70'; // Закрыт
+        break;
+      case 'work-to-wait':
+        updates.status = '30'; // В ожидании
+        break;
+      case 'reassigned-to-work':
+        updates.status = '20'; // В работе
+        break;
+      case 'wait-to-work':
+        updates.status = '20'; // В работе
+        break;
+      // Добавьте другие действия по необходимости
+    }
+
+    // Добавляем комментарий к обновлениям
+    if (comment) {
+      updates.comment = comment;
+    }
+
+    // Применяем обновления к выбранным инцидентам
+    if (Object.keys(updates).length > 0) {
+      DataManager.bulkUpdate(selectedIds, updates);
+    }
+
+    // Показываем уведомление
+    this.showNotification(`Действие "${action}" применено к ${selectedIds.length} инцидентам`);
+  },
+
+  showNotification(message, type = 'success') {
+    // Создаем уведомление
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} notification-alert`;
+    notification.textContent = message;
+    notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+  `;
+
+    document.body.appendChild(notification);
+
+    // Удаляем уведомление через 3 секунды
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
   },
 
   handleEditClick(e) {
@@ -1346,6 +1427,120 @@ const ModalManager = (() => {
 })();
 
 // ==========================================
+// COMMENT MODAL MANAGER
+// ==========================================
+const CommentModalManager = (() => {
+  let elements = {};
+  let currentAction = null;
+  let currentCallback = null;
+
+  function init() {
+    elements = {
+      modal: document.getElementById('commentModal'),
+      closeBtn: document.getElementById('commentModalClose'),
+      cancelBtn: document.getElementById('btnCancelAnalysis'),
+      confirmBtn: document.getElementById('btnConfirmAnalysis'),
+      commentInput: document.getElementById('analysisComment'),
+      countEl: document.getElementById('analysisCount')
+    };
+
+    if (!elements.modal) {
+      console.warn('Comment modal elements not found');
+      return false;
+    }
+
+    attachEventListeners();
+    return true;
+  }
+
+  function attachEventListeners() {
+    elements.closeBtn.addEventListener('click', close);
+    elements.cancelBtn.addEventListener('click', close);
+    elements.confirmBtn.addEventListener('click', confirm);
+
+    elements.modal.addEventListener('click', (e) => {
+      if (e.target === elements.modal) close();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && elements.modal.classList.contains('show')) {
+        close();
+      }
+    });
+  }
+
+  function open(action, selectedCount, callback) {
+    if (!elements.modal) return;
+
+    currentAction = action;
+    currentCallback = callback;
+
+    // Устанавливаем заголовок в зависимости от действия
+    const actionTitles = {
+      'status-new': 'Взять в анализ',
+      'to-exception': 'Переместить в исключения',
+      'reassign': 'Переназначить',
+      'analysis-to-work': 'Взять в работу',
+      'close': 'Закрыть инцидент',
+      'work-to-wait': 'Переместить в ожидание',
+      'reassigned-to-work': 'Взять в работу',
+      'wait-to-work': 'Вернуть в работу'
+    };
+
+    const title = actionTitles[action] || 'Подтверждение действия';
+    elements.modal.querySelector('h3').textContent = title;
+
+    // Устанавливаем текст для кнопки подтверждения
+    const confirmTexts = {
+      'status-new': 'Взять в анализ',
+      'to-exception': 'Переместить',
+      'reassign': 'Переназначить',
+      'analysis-to-work': 'Взять в работу',
+      'close': 'Закрыть',
+      'work-to-wait': 'Переместить',
+      'reassigned-to-work': 'Взять в работу',
+      'wait-to-work': 'Вернуть в работу'
+    };
+
+    elements.confirmBtn.textContent = confirmTexts[action] || 'Подтвердить';
+
+    // Устанавливаем количество выбранных инцидентов
+    elements.countEl.textContent = selectedCount;
+
+    // Очищаем предыдущий комментарий
+    elements.commentInput.value = '';
+
+    // Показываем модалку
+    elements.modal.classList.add('show');
+    elements.commentInput.focus();
+  }
+
+  function close() {
+    if (!elements.modal) return;
+
+    elements.modal.classList.remove('show');
+    currentAction = null;
+    currentCallback = null;
+  }
+
+  function confirm() {
+    const comment = elements.commentInput.value.trim();
+
+    if (currentCallback) {
+      currentCallback(currentAction, comment);
+    }
+
+    close();
+  }
+
+  return {
+    init,
+    open,
+    close
+  };
+})();
+
+// ==========================================
 // APPLICATION INITIALIZER
 // ==========================================
 const App = {
@@ -1354,12 +1549,16 @@ const App = {
       // Initialize modal first
       const modalInitialized = ModalManager.init();
       const viewIdModalInitialized = ViewIdModalManager.init();
+      const commentModalInitialized = CommentModalManager.init();
 
       if (!modalInitialized) {
         console.warn('Edit modal initialization failed');
       }
       if (!viewIdModalInitialized) {
         console.warn('View ID modal initialization failed');
+      }
+      if (!commentModalInitialized) {
+        console.warn('Comment modal initialization failed');
       }
 
       // Load data

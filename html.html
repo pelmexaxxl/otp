@@ -209,6 +209,30 @@
             </div>
         </div>
 
+        <!-- Comment Modal -->
+        <div id="commentModal" class="custom-modal-overlay comment-modal">
+            <div class="custom-modal">
+                <div class="custom-modal-header">
+                    <h3>Взять в анализ</h3>
+                    <button class="modal-close" id="commentModalClose">&times;</button>
+                </div>
+                <div class="custom-modal-body">
+                    <div class="form-group">
+                        <label for="analysisComment">Комментарий к действию:</label>
+                        <textarea id="analysisComment" class="form-control" rows="4"
+                            placeholder="Укажите причину или дополнительную информацию..."></textarea>
+                    </div>
+                    <div class="selected-count-info">
+                        Будет применено к: <span id="analysisCount">0</span> инцидентам
+                    </div>
+                </div>
+                <div class="custom-modal-footer">
+                    <button class="btn btn-cancel" id="btnCancelAnalysis">Отмена</button>
+                    <button class="btn btn-primary" id="btnConfirmAnalysis">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Pagination -->
         <div id="paginationContainer" class="pagination-container"></div>
     </div>

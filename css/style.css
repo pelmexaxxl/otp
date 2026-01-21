@@ -773,3 +773,17 @@ th:has(> .resize-handle:hover) {
     width: 100%;
     text-align: center;
 }
+
+/* Comment Modal Styles */
+.comment-modal .custom-modal {
+    max-width: 500px;
+}
+
+.comment-modal .selected-count-info {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #6c757d;
+}
