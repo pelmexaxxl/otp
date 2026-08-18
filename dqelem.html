@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <link href="/portal/static/falcon.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <title>Data Quality</title>
+    <script src="/portal/static/vue.js"></script>
+    <script src="/portal/static/axios.js"></script>
+    <style>
+        [v-cloak] { display: none !important; }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        #tableContainer {
+            overflow-x: scroll;      /* всегда показываем горизонтальный скроллбар */
+            overflow-y: auto;        /* вертикальная прокрутка при необходимости */
+            width: 100%;
+            max-height: 70vh;        /* ограничиваем высоту, чтобы скроллбар был внизу */
+            scrollbar-width: thin;
+            scrollbar-color: #c1c1c1 #f1f1f1;
+        }
+        
+        #tableContainer::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        #tableContainer::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        #tableContainer::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        #tableContainer::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        #tableContainer table {
+            width: max-content;
+            min-width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        /*table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }*/
+
+        th,
+        td {
+            padding: 8px 12px;
+            border: none;
+            text-align: left;
+            color: #000000 !important;
+        }
+
+        /* убираем жёсткую ширину и запрет переноса */
+        #tableContainer table th:not(:first-child),
+        #tableContainer table td:not(:first-child) {
+            min-width: auto;         /* было 42ch */
+            white-space: normal;     /* было nowrap – разрешаем перенос */
+            word-wrap: break-word;   /* перенос длинных слов */
+        }
+
+        th {
+            background-color: #f5f5f5;
+        }
+
+        .toggle-btn {
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+            user-select: none;
+        }
+
+        .hidden-row {
+            display: none;
+            background-color: #fafafa;
+        }
+
+        #tableContainer a {
+            color: inherit;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        #tableContainer a:hover {
+            color: #1890ff !important;
+            text-decoration: underline;
+        }
+
+        .controls {
+            all: unset !important;
+            margin: 10px 0 !important;
+            display: flex !important;
+            gap: 10px !important;
+            align-items: center !important;
+        }        
+
+        .bulk-action.hidden {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0;
+            height: 0;
+            width: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bulk-action {
+            padding: 8px 16px;
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .bulk-action:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .select-all-btn {
+            padding: 8px 16px;
+            background-color: #52c41a;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .row-disabled {
+            opacity: 0.6;
+        }
+
+        .create-check-text {
+            color: #8c8c8c;
+            cursor: pointer;
+        }
+
+        .group-row {
+            font-weight: bold;
+            background-color: #fff;
+        }
+
+        .nested-row {
+            background-color: #fafafa;
+        }
+
+        .summary-text {
+            color: #8c8c8c;
+            margin-left: 20px;
+            font-size: 13px;
+        }
+
+        .dq-link>a {
+            color: #000000 !important;
+            margin-left: 12px;
+            font-size: 13px;
+        }
+
+        .checked-disabled {
+            opacity: 0.8;
+            cursor: not-allowed;
+        }
+
+        .item-checkbox:not(:disabled) {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #1890ff;
+            border-radius: 3px;
+            background-color: white;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+            margin: 0;
+        }
+
+        .item-checkbox:not(:disabled):checked {
+            background-color: #1890ff;
+        }
+
+        .item-checkbox:not(:disabled):checked::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            line-height: 1;
+        }
+
+        .item-checkbox:not(:disabled):hover:not(:checked) {
+            background-color: #e3f2fd;
+        }
+
+        .item-checkbox.dqla-mode:not(:disabled) {
+            border-color: #52c41a;
+        }
+
+        .item-checkbox.dqla-mode:not(:disabled):checked {
+            background-color: #52c41a;
+        }
+
+        .item-checkbox.dqla-mode:not(:disabled):hover:not(:checked) {
+            background-color: #f6ffed;
+        }
+
+        .item-checkbox:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .table-row:has(.item-checkbox:checked:not(.dqla-mode)) {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        .table-row:has(.item-checkbox.dqla-mode:checked) {
+            background-color: #f6ffed;
+            border-left: 4px solid #52c41a;
+        }
+
+        .checkbox-cell {
+            align-items: center;
+            gap: 4px;
+            text-align: center;
+        }
+
+        .bulk-dqla-btn {
+            padding: 8px 16px;
+            background-color: #52c41a;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .bulk-dqla-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .bulk-dqla-btn:hover:not(:disabled) {
+            background-color: #389e0d;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .modal-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .modal-overlay.active {
+            display: flex !important;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            padding: 24px;
+            width: 100%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            margin: 0; /* убираем отступы, центрирует wrapper */
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #262626;
+        }
+
+        .modal-body {
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #262626;
+            font-weight: 500;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: #40a9ff;
+            box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+        }
+
+        .preview-section {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .preview-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #262626;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preview-count {
+            background-color: #f5f5f5;
+            color: #595959;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+
+        .indicator-group {
+            margin-bottom: 16px;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .indicator-group.valid-group {
+            border-color: #b7eb8f;
+        }
+
+        .indicator-group.error-group {
+            border-color: #ffa39e;
+            border-width: 2px;
+        }
+
+        .indicator-header {
+            background-color: #f6ffed;
+            padding: 12px 16px;
+            font-weight: 600;
+            color: #237804;
+            border-bottom: 1px solid #b7eb8f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .indicator-group.error-group .indicator-header {
+            background-color: #fff1f0;
+            color: #cf1322;
+            border-bottom-color: #ffa39e;
+        }
+
+        .indicator-name {
+            font-size: 14px;
+        }
+
+        .indicator-type {
+            font-size: 12px;
+            color: #389e0d;
+            background-color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #b7eb8f;
+        }
+
+        .indicator-group.error-group .indicator-type {
+            color: #cf1322;
+            border-color: #ffa39e;
+            background-color: #fff;
+        }
+
+        .checks-list {
+            background-color: #fff;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .check-item {
+            padding: 8px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+            color: #595959;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .check-item:last-child {
+            border-bottom: none;
+        }
+
+        .check-item::before {
+            content: '•';
+            color: #52c41a;
+            font-weight: bold;
+        }
+
+        .error-content {
+            background-color: #fff1f0;
+        }
+
+        .error-message {
+            padding: 12px 16px;
+            color: #cf1322;
+            font-size: 13px;
+            font-weight: 600;
+            border-bottom: 1px solid #ffa39e;
+        }
+
+        .error-items-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .error-item {
+            padding: 10px 16px;
+            border-bottom: 1px solid #ffa39e;
+            font-size: 13px;
+        }
+
+        .error-item:last-child {
+            border-bottom: none;
+        }
+
+        .error-item-br {
+            color: #cf1322;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .error-item-check {
+            color: #595959;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .error-item-check::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: #cf1322;
+        }
+
+        .no-preview {
+            text-align: center;
+            color: #8c8c8c;
+            padding: 40px 20px;
+            font-style: italic;
+        }
+
+        .preview-warning {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background-color: #fff7e6;
+            border: 1px solid #ffd591;
+            border-radius: 4px;
+            color: #d46b08;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preview-warning::before {
+            content: '⚠';
+            font-size: 16px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-cancel {
+            background-color: #fff;
+            border: 1px solid #d9d9d9;
+            color: #595959;
+        }
+
+        .modal-btn-cancel:hover {
+            color: #40a9ff;
+            border-color: #40a9ff;
+        }
+
+        .modal-btn-primary {
+            background-color: #52c41a;
+            color: white;
+        }
+
+        .modal-btn-primary:hover {
+            background-color: #389e0d;
+        }
+
+        .modal-btn-primary:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" v-cloak>
+        <!-- Управляющие кнопки -->
+        <div class="controls">
+            <button class="bulk-action" v-show="selectedChecksCount > 0" @click="createSelectedChecks">
+                Создать выбранные проверки ({{ selectedChecksCount }})
+            </button>
+            <button class="bulk-dqla-btn" v-show="selectedDqlaCount > 0" @click="openDqlaModal">
+                Создать DQLA ({{ selectedDqlaCount }})
+            </button>
+        </div>
+
+        <!-- Таблица -->
+        <div class="table-responsive scrollbar" id="tableContainer">
+            <table class="table" id="dataTableDQ">
+                <tbody>
+                    <template v-for="(group, idxCol) in groupedData">
+                        <tr class="group-row" :key="'group-' + idxCol">
+                            <td colspan="5" style="display:flex; align-items:center;">
+                                <span class="toggle-btn" @click="toggleGroup(idxCol)">
+                                    {{ group.expanded ? '▼' : '▶' }}
+                                </span>
+                                <span v-html="group.columnLink"></span>
+                                <span class="summary-text">
+                                    Создано проверок {{ group.createdChecks }} из {{ group.totalChecks }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr :key="'inner-' + idxCol">
+                            <td colspan="5">
+                                <table class="table table-hover" :id="'grp_' + idxCol" style="width:calc(100% - 24px); margin-left:24px;" v-show="group.expanded">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:40px; text-align:center;">
+                                                <input type="checkbox" @change="toggleGroupCheckboxes(idxCol, $event)">
+                                            </th>
+                                            <th>Термин</th>
+                                            <th>Бизнес-правило</th>
+                                            <th>Проверка</th>
+                                            <th>Статус</th>
+                                            <th>DQLA</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(row, idx) in group.rows" :key="idx" class="table-row">
+                                            <td class="checkbox-cell">
+                                                <input type="checkbox" class="item-checkbox"
+                                                    :class="{ 'dqla-mode': getCheckboxMode(row) === 'dqla' }"
+                                                    :data-mode="getCheckboxMode(row)"
+                                                    :checked="isChecked(row)"
+                                                    @change="toggleRow(row, $event)"
+                                                    :disabled="isRowDisabled(row)">
+                                            </td>
+                                            <td v-html="makeCell(row.termId, row.termName, 'GlossaryTerm')"></td>
+                                            <td v-html="makeCell(row.brId, row.brName, 'DQBusinessRule')"></td>
+                                            <td v-if="row.brId == 1586886">
+                                                <!-- Здесь будет подписка, но пока заглушка -->
+                                                <span v-if="row.errors">{{ row.errors }}</span>
+                                                <span v-else v-html="makeCell(row.implId, row.implName, 'DQImplementation')"></span>
+                                            </td>
+                                            <td v-else v-html="makeCell(row.implId, row.implName, 'DQImplementation')"></td>
+                                            <td v-html="statusHtml(row.Status)"></td>
+                                            <!-- <td v-html="makeCell(row.dqlaId, row.dqlaName, 'DQLA')"></td> -->
+                                            <td>
+                                                <template v-if="row.dqlaList && row.dqlaList.length">
+                                                    <a v-for="dqla in row.dqlaList" :key="dqla.id" 
+                                                       :href="`/work/entity/DQLA/${dqla.id}`" target="_blank" 
+                                                       style="display:block;">
+                                                        {{ dqla.name }}
+                                                    </a>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Модальное окно (Vue) -->
+        <div v-if="modalOpen" class="modal-overlay" @click.self="closeModal">
+            <div class="modal-wrapper">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Управление DQLA</h3>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Шаг 1 -->
+                        <div v-if="step === 1">
+                            <div class="form-group">
+                                <label class="form-label">Выберите действие:</label>
+                                <select class="form-select" v-model="action">
+                                    <option value="new">Создать новый DQLA</option>
+                                    <option value="view">Отображение ранее созданных DQLA</option>
+                                </select>
+                            </div>
+                            <!-- Создание нового -->
+                            <div v-if="action === 'new'">
+                                <div class="form-group">
+                                    <label class="form-label">Папка</label>
+                                    <input type="text" class="form-control" v-model="folderSearch"
+                                        @input="searchFolders" placeholder="Введите название папки"
+                                        :disabled="!!selectedFolder">
+                                    <ul class="list-group mt-1" v-if="folderSuggestions.length && !selectedFolder">
+                                        <li v-for="f in folderSuggestions" :key="f.businessId" class="list-group-item list-group-item-action"
+                                            @click="selectFolder(f)">{{ f.objectName }}</li>
+                                    </ul>
+                                    <div class="d-flex flex-wrap gap-2 mt-2" v-if="selectedFolder">
+                                        <span class="badge text-bg-secondary">
+                                            {{ selectedFolder.objectName }}
+                                            <button type="button" class="btn-close btn-close-white" style="font-size:.6rem" @click="removeFolder"></button>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Название DQLA</label>
+                                    <input class="form-control" v-model="dqlaName" @input="checkDqlaName"
+                                        placeholder="Введите название DQLA" :disabled="!selectedFolder">
+                                    <div v-if="dqlaNameError" class="text-danger" style="font-size:0.875rem; margin-top:4px;">
+                                        {{ dqlaNameError }}
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Потребитель</label>
+                                    <input type="text" class="form-control" v-model="supplierSearch"
+                                        @input="searchSuppliers" placeholder="Введите логин/ФИО">
+                                    <ul class="list-group mt-1" v-if="supplierSuggestions.length">
+                                        <li v-for="s in supplierSuggestions" :key="s.businessId" class="list-group-item list-group-item-action"
+                                            @click="selectSupplier(s)">{{ s.objectName }}</li>
+                                    </ul>
+                                    <div class="d-flex flex-wrap gap-2 mt-2" v-if="selectedSuppliers.length">
+                                        <span v-for="(u, i) in selectedSuppliers" :key="i" class="badge text-bg-secondary">
+                                            {{ u.name }}
+                                            <button type="button" class="btn-close btn-close-white" style="font-size:.6rem" @click="removeSupplier(i)"></button>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Просмотр существующих -->
+                            <div v-if="action === 'view'">
+                                <div class="form-group">
+                                    <label class="form-label">Список ранее созданных DQLA:</label>
+                                    <div v-if="dqlaList.length === 0" class="text-muted">Нет созданных DQLA</div>
+                                    <ul class="list-group" v-else>
+                                        <li v-for="dqla in dqlaList" :key="dqla.id" class="list-group-item list-group-item-action"
+                                            :class="{ active: selectedExistingDqla && selectedExistingDqla.id === dqla.id }"
+                                            @click="selectExistingDqla(dqla)">
+                                            {{ dqla.name }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Шаг 2 -->
+                        <div v-if="step === 2">
+                            <div class="form-group">
+                                <label class="form-label">Вариант агрегации</label>
+                                <select class="form-select" v-model="aggregationType">
+                                    <option value="by_characteristic">По характеристике КД</option>
+                                    <option value="by_term">По термину глоссария</option>
+                                </select>
+                            </div>
+                            <div class="preview-section">
+                                <div class="preview-title">
+                                    Предпросмотр создаваемых индикаторов
+                                    <span class="preview-count">{{ indicatorGroupsList.length }}</span>
+                                </div>
+                                <div v-if="indicatorGroupsList.length === 0 && errorItemsList.length === 0" class="no-preview">
+                                    Нет данных для отображения
+                                </div>
+                                <div v-else>
+                                    <div v-for="group in indicatorGroupsList" :key="group.key" class="indicator-group valid-group">
+                                        <div class="indicator-header">
+                                            <span class="indicator-name">{{ group.name }}</span>
+                                            <span class="indicator-type">{{ group.type }} ({{ group.checks.length }} пров.)</span>
+                                        </div>
+                                        <div class="checks-list">
+                                            <div v-for="check in group.checks" :key="check" class="check-item">{{ check }}</div>
+                                        </div>
+                                    </div>
+                                    <div v-if="errorItemsList.length > 0" class="indicator-group error-group">
+                                        <div class="indicator-header">
+                                            <span class="indicator-name">Без характеристики КД</span>
+                                            <span class="indicator-type">Пропущено</span>
+                                        </div>
+                                        <div class="error-content">
+                                            <div class="error-message">На карточке бизнес-правила отсутствует атрибут "Характеристика КД"</div>
+                                            <div class="error-items-list">
+                                                <div v-for="err in errorItemsList" :key="err.checkName" class="error-item">
+                                                    <div class="error-item-br">{{ err.brName }}</div>
+                                                    <div class="error-item-check">{{ err.checkName }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="errorItemsList.length > 0 && aggregationType === 'by_characteristic'" class="preview-warning">
+                                    Имеются проверки без характеристики КД. Исправьте бизнес-правила перед созданием индикаторов.
+                                </div>
+                            </div>
+                            <button class="modal-btn modal-btn-cancel" style="margin-top:10px;" @click="goBackToStep1">Назад</button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-btn modal-btn-cancel" @click="closeModal">Отмена</button>
+                        <button class="modal-btn modal-btn-primary" 
+                                @click="handleModalAction"
+                                :disabled="(step === 1 && (action === 'view' ? !selectedExistingDqla : !isStep1Valid)) || isCreating">
+                            {{ step === 1 ? (action === 'view' ? 'Далее' : 'Далее') : (isCreating ? 'Создание...' : 'Создать') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    setTimeout(() => {
+        // Весь код на Vue будет здесь
+        // Начну с создания приложения
+        const app = Vue.createApp({
+            data() {
+                return {
+                    // Данные таблицы
+                    rawData: [],
+                    groupedData: [],
+                    selectedChecks: new Set(),
+                    selectedDqla: new Set(),
+
+                    // Модалка
+                    modalOpen: false,
+                    step: 1,
+                    action: 'new',
+                    aggregationType: 'by_characteristic',
+                    isCreating: false,
+                    isViewMode: false,
+
+                    // Поля создания
+                    folderSearch: '',
+                    folderSuggestions: [],
+                    selectedFolder: null,
+                    folderDebounce: null,
+                    dqlaName: '',
+                    dqlaNameError: '',
+                    checkDebounce: null,
+                    supplierSearch: '',
+                    supplierSuggestions: [],
+                    selectedSuppliers: [],
+                    supplierDebounce: null,
+
+                    // Просмотр существующих
+                    dqlaList: [],
+                    selectedExistingDqla: null,
+
+                    // Для предпросмотра (ручное обновление)
+                    indicatorGroupsList: [],
+                    errorItemsList: [],
+
+                    // Вспомогательное
+                    fsdId: null,
+                };
+            },
+            computed: {
+                selectedChecksCount() {
+                    return this.selectedChecks.size;
+                },
+                selectedDqlaCount() {
+                    return this.selectedDqla.size;
+                },
+                isStep1Valid() {
+                    if (this.action === 'view') return !!this.selectedExistingDqla;
+                    const folderOk = this.selectedFolder && this.selectedFolder.businessId;
+                    const nameOk = this.dqlaName && this.dqlaName.trim().length > 0;
+                    const supplierOk = this.selectedSuppliers.length > 0;
+                    return folderOk && nameOk && supplierOk;
+                }
+            },
+            watch: {
+                selectedRows: {
+                    handler() { this.updateIndicatorGroups(); },
+                    deep: true
+                },
+                aggregationType() { this.updateIndicatorGroups(); }
+            },
+            methods: {
+                // ----- ЗАГРУЗКА ДАННЫХ -----
+                async loadData() {
+                    const entity = window.DataOcean.subscriptions.getEntityContext();
+                    this.fsdId = entity.id;
+                    if (!this.fsdId) return;
+
+                    const response = await fetch(`/api/groovy/script/DQElements.groovy?fsd_id=${this.fsdId}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json; charset=utf-8",
+                            Authorization: `Bearer ${localStorage.getItem("authToken")}`
+                        }
+                    });
+                    const data = await response.json();
+                    this.rawData = data;
+                    this.buildGroups();
+                },
+
+                goBackToStep1() {
+                    this.step = 1;
+                    // В режиме просмотра сохраняем выбранный DQLA, чтобы не потерять выбор
+                    // Если нужно, можно очистить ошибки или другие поля, но не сбрасываем selectedExistingDqla
+                    // Для создания нового ничего не меняем
+                },
+
+                buildGroups() {
+                    const grouped = {};
+                    this.rawData.forEach(row => {
+                        const colKey = row.columnName;
+                        if (!grouped[colKey]) grouped[colKey] = [];
+                        grouped[colKey].push(row);
+                    });
+                
+                    const result = [];
+                    Object.entries(grouped).forEach(([colName, rows], idx) => {
+                        const hasData = rows.some(r => Object.values(r).some(v => v && v !== ""));
+                        if (!hasData) return;
+                
+                        // Группируем строки по уникальному набору полей (кроме dqlaId/dqlaName)
+                        const uniqueGroups = new Map();
+                        rows.forEach(row => {
+                            // Ключ: объединяем поля, которые должны быть одинаковыми
+                            const key = `${row.termId || ''}|${row.brId || ''}|${row.implId || ''}|${row.Status || ''}|${row.columnId || ''}`;
+                            if (!uniqueGroups.has(key)) {
+                                uniqueGroups.set(key, {
+                                    termId: row.termId,
+                                    termName: row.termName,
+                                    brId: row.brId,
+                                    brName: row.brName,
+                                    implId: row.implId,
+                                    implName: row.implName,
+                                    Status: row.Status,
+                                    dq_kind: row.dq_kind,
+                                    columnId: row.columnId,
+                                    columnName: row.columnName,
+                                    dqImplSampleId: row.dqImplSampleId,
+                                    dqlaList: []
+                                });
+                            }
+                            const group = uniqueGroups.get(key);
+                            if (row.dqlaId && row.dqlaName) {
+                                group.dqlaList.push({ id: row.dqlaId, name: row.dqlaName });
+                            }
+                        });
+                
+                        // Преобразуем Map в массив объектов
+                        // Фильтруем строки, у которых только термин
+                        let mergedRows = Array.from(uniqueGroups.values()).map(g => ({
+                            ...g,
+                            dqlaList: g.dqlaList.length ? g.dqlaList : null
+                        })).filter(row => row.brId || row.implId || row.Status || (row.dqlaList && row.dqlaList.length));
+                        
+                        // если после фильтрации не осталось строк – пропускаем группу
+                        if (mergedRows.length === 0) return;
+
+                        const totalChecks = mergedRows.length;
+                        const createdChecks = mergedRows.filter(r => r.implName).length;
+                
+                        const columnLink = rows[0].columnId
+                            ? `<a href="/work/entity/TableColumn/${rows[0].columnId}">${colName}</a>`
+                            : `<span>${colName}</span>`;
+                
+                        result.push({
+                            id: idx,
+                            columnName: colName,
+                            columnLink,
+                            totalChecks,
+                            createdChecks,
+                            expanded: false,
+                            rows: mergedRows
+                        });
+                    });
+                    this.groupedData = result;
+                },
+
+                toggleGroup(idx) {
+                    this.groupedData[idx].expanded = !this.groupedData[idx].expanded;
+                },
+
+                // ----- ЛОГИКА ЧЕКБОКСОВ -----
+                getCheckboxMode(row) {
+                    if (row.implName) return 'dqla';
+                    return 'check';
+                },
+                isChecked(row) {
+                    const mode = this.getCheckboxMode(row);
+                    if (mode === 'dqla') return this.selectedDqla.has(row);
+                    return this.selectedChecks.has(row);
+                },
+                isRowDisabled(row) {
+                    // Если нет dqImplSampleId И нет implName – отключаем
+                    if (!row.dqImplSampleId && !row.implName) return true;
+                    return false;
+                },
+                toggleRow(row, event) {
+                    const checked = event.target.checked;
+                    const mode = this.getCheckboxMode(row);
+                    if (mode === 'dqla') {
+                        if (checked) this.selectedDqla.add(row);
+                        else this.selectedDqla.delete(row);
+                    } else {
+                        if (checked) this.selectedChecks.add(row);
+                        else this.selectedChecks.delete(row);
+                    }
+                },
+                toggleGroupCheckboxes(groupIdx, event) {
+                    const checked = event.target.checked;
+                    const rows = this.groupedData[groupIdx].rows;
+                    rows.forEach(row => {
+                        const mode = this.getCheckboxMode(row);
+                        if (mode === 'dqla') {
+                            if (checked) this.selectedDqla.add(row);
+                            else this.selectedDqla.delete(row);
+                        } else {
+                            if (checked) this.selectedChecks.add(row);
+                            else this.selectedChecks.delete(row);
+                        }
+                    });
+                },
+
+                // ----- СОЗДАНИЕ ПРОВЕРОК (массовое) -----
+                async createSelectedChecks() {
+                    const items = Array.from(this.selectedChecks);
+                    console.log("items = ", items)
+                    if (!items.length) return;
+                    if (!confirm(`Создать ${items.length} проверок?`)) return;
+                    try {
+                        const promises = items.map(row => {
+                            const params = new URLSearchParams({
+                                fsd_id: this.fsdId || "",
+                                br_id: row.brId || "",
+                                br_name: row.brName || "",
+                                column_id: row.columnId || "",
+                                column_name: row.columnName || "",
+                                dq_impl_sample_id: row.dqImplSampleId || ""
+                            });
+                            return fetch(`/api/groovy/script/CreateImplFromSample.groovy?${params}`, {
+                                method: "POST",
+                                headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` }
+                            });
+                        });
+                        await Promise.all(promises);
+                        alert(`Создано ${items.length} проверок!`);
+                        location.reload();
+                    } catch (e) {
+                        alert('Ошибка при создании проверок');
+                    }
+                },
+
+                // ----- ОТКРЫТИЕ МОДАЛКИ ДЛЯ DQLA -----
+                openDqlaModal() {
+                    const rows = Array.from(this.selectedDqla);
+                    if (!rows.length) return alert('Выберите хотя бы одну проверку.');
+                    this.selectedRows = rows; // выбранные проверки
+                    this.modalOpen = true;
+                    this.step = 1;
+                    this.action = 'new';
+                    this.isViewMode = false;
+                    this.selectedExistingDqla = null;
+                    this.selectedFolder = null;
+                    this.dqlaName = '';
+                    this.dqlaNameError = '';
+                    this.selectedSuppliers = [];
+                    this.supplierSearch = '';
+                    this.folderSearch = '';
+                    this.folderSuggestions = [];
+                    this.supplierSuggestions = [];
+                    // Загружаем список существующих DQLA
+                    this.loadDqlaList();
+                    // Обновить предпросмотр
+                    this.updateIndicatorGroups();
+                },
+
+                // ----- ЗАКРЫТИЕ МОДАЛКИ -----
+                closeModal() {
+                    this.modalOpen = false;
+                    this.step = 1;
+                    this.isCreating = false;
+                    this.isViewMode = false;
+                    this.selectedRows = [];
+                    this.indicatorGroupsList = [];
+                    this.errorItemsList = [];
+                },
+
+                // ----- ЗАГРУЗКА СПИСКА DQLA -----
+                async loadDqlaList() {
+                    if (!this.fsdId) return;
+                    if (window.allDQData) {
+                        // уже есть
+                        this.dqlaList = this.extractUniqueDqla(window.allDQData);
+                        return;
+                    }
+                    try {
+                        const resp = await fetch(`/api/groovy/script/DQElements.groovy?fsd_id=${this.fsdId}`, {
+                            method: "POST",
+                            headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` }
+                        });
+                        const data = await resp.json();
+                        window.allDQData = data;
+                        this.dqlaList = this.extractUniqueDqla(data);
+                    } catch (e) {
+                        console.error('Ошибка загрузки списка DQLA', e);
+                        this.dqlaList = [];
+                    }
+                },
+
+                extractUniqueDqla(data) {
+                    if (!Array.isArray(data)) return [];
+                    const map = new Map();
+                    data.forEach(item => {
+                        const id = item.dqlaId || item.dqla_id || item.id;
+                        const name = item.dqlaName || item.dqla_name || item.name || item.objectName;
+                        if (id && name && !map.has(id)) {
+                            map.set(id, { id, name });
+                        }
+                    });
+                    return Array.from(map.values());
+                },
+
+                // ----- ВЫБОР СУЩЕСТВУЮЩЕГО DQLA -----
+                selectExistingDqla(dqla) {
+                    this.selectedExistingDqla = dqla;
+                },
+
+                // ----- ОБРАБОТКА ДЕЙСТВИЙ В МОДАЛКЕ -----
+                async handleModalAction() {
+                    if (this.step === 1) {
+                        // Переход на шаг 2
+                        if (this.action === 'view') {
+                            if (!this.selectedExistingDqla) return alert('Выберите DQLA');
+                            // Загружаем данные для выбранного DQLA
+                            // const data = await this.loadAllData();
+                            // const filtered = data.filter(item => item.dqlaId && String(item.dqlaId) === String(this.selectedExistingDqla.id));
+                            // if (!filtered.length) return alert('Нет данных для выбранного DQLA');
+                            // this.selectedRows = filtered;
+
+                            // НЕ перезаписываем selectedRows – оставляем те, что были выбраны чекбоксами
+                            // Просто проверяем, что они есть
+                            if (!this.selectedRows.length) {
+                                return alert('Нет выбранных проверок для добавления в DQLA.');
+                            }
+                            this.isViewMode = true;
+                        } else {
+                            // Создание нового
+                            if (!this.isStep1Valid) return alert('Заполните все поля');
+                            if (this.dqlaNameError) return alert('Исправьте ошибку');
+                            this.isViewMode = false;
+                        }
+                        this.step = 2;
+                        this.updateIndicatorGroups();
+                    } else {
+                        // Шаг 2
+                        /* if (this.isViewMode) {
+                            this.closeModal(); 
+                        } else {
+                            // Создание нового DQLA
+                            await this.createDqla();
+                        } */
+                        await this.createDqla();
+                    }
+                },
+
+                async loadAllData() {
+                    if (window.allDQData) return window.allDQData;
+                    const resp = await fetch(`/api/groovy/script/DQElements.groovy?fsd_id=${this.fsdId}`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` }
+                    });
+                    const data = await resp.json();
+                    window.allDQData = data;
+                    return data;
+                },
+
+                // ----- СОЗДАНИЕ DQLA -----
+                async createDqla() {
+                    if (this.isCreating) return;
+                    if (this.selectedRows.length === 0) {
+                        alert('Нет выбранных проверок.');
+                        return;
+                    }
+                    this.isCreating = true;
+                    try {
+                        const indicatorsStructure = {};
+                        const map = {
+                            "completeness": 'Полнота',
+                            "accuracy": 'Точность',
+                            "actuality": 'Актуальность',
+                            "consistency": 'Согласованность',
+                            "uniqueness": 'Уникальность'
+                        };
+                        const getCharName = (code) => {
+                            if (!code) return 'Без характеристики';
+                            // Убираем все кавычки (и двойные, и одинарные) из строки
+                            let normalized = code.replace(/["']/g, '').toLowerCase().trim();
+                            return map[normalized] || code;
+                        };
+                        this.selectedRows.forEach(row => {
+                            if (this.aggregationType === 'by_characteristic' && (!row.dq_kind || !row.dq_kind.trim())) return;
+                            let indicatorName = this.aggregationType === 'by_characteristic'
+                                ? getCharName(row.dq_kind)
+                                : `Качество данных ${row.termName || 'Без термина'}`;
+                            if (!indicatorsStructure[indicatorName]) indicatorsStructure[indicatorName] = [];
+                            if (row.implId) {
+                                indicatorsStructure[indicatorName].push({
+                                    id: row.implId,
+                                    name: row.implName || row.brName || 'Без названия'
+                                });
+                            }
+                        });
+                        /* const requestBody = {
+                            aggregation_type: this.aggregationType,
+                            indicators: indicatorsStructure,
+                            fsd_id: this.fsdId,
+                            dqla_folder: this.selectedFolder.businessId,
+                            dqla_name: this.dqlaName.trim(),
+                            data_consumer: this.selectedSuppliers.map(u => u.name).join(', '),
+                            supplier_ids: this.selectedSuppliers.map(u => u.id)
+                        }; */
+                        const requestBody = {
+                            aggregation_type: this.aggregationType,
+                            indicators: indicatorsStructure,
+                            fsd_id: this.fsdId
+                        };
+                
+                        // Если это режим просмотра (создание на основе существующего)
+                        if (this.isViewMode && this.selectedExistingDqla) {
+                            // Передаём ID существующего DQLA
+                            requestBody.copy_from_dqla_id = this.selectedExistingDqla.id;
+                            // Также можно передать имя, если нужно:
+                            // requestBody.dqla_name = this.selectedExistingDqla.name;
+                        } else {
+                            // Режим создания нового с заполнением полей
+                            requestBody.dqla_folder = this.selectedFolder.businessId;
+                            requestBody.dqla_name = this.dqlaName.trim();
+                            requestBody.data_consumer = this.selectedSuppliers.map(u => u.name).join(', ');
+                            requestBody.supplier_ids = this.selectedSuppliers.map(u => u.id);
+                        }
+                        await fetch('/api/groovy/script/CreateDQLAfromFSD.groovy', {
+                            method: "POST",
+                            headers: {
+                                Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+                                "Content-Type": "application/json;charset=utf-8"
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        this.closeModal();
+                        location.reload();
+                    } catch (e) {
+                        alert('Ошибка создания DQLA');
+                        console.error(e);
+                    } finally {
+                        this.isCreating = false;
+                    }
+                },
+
+                // ----- ПОИСК ПАПОК -----
+                searchFolders() {
+                    clearTimeout(this.folderDebounce);
+                    const q = this.folderSearch.trim();
+                    if (q.length < 2) { this.folderSuggestions = []; return; }
+                    if (this.selectedFolder) { this.folderSuggestions = []; return; }
+                    this.folderDebounce = setTimeout(async () => {
+                        try {
+                            const resp = await window.DataOcean.api.post(`/search?searchString=${q}&limit=10&offset=0&objectTypes=Folder&parentId=630042&deepSearch=false&glossaryMode=public&quickSearch=true`);
+                            let data = resp.data.searchResults || [];
+                            const hardcoded = { businessId: 630042, objectName: 'Основная папка' };
+                            data = [hardcoded, ...data];
+                            this.folderSuggestions = data;
+                        } catch (e) {
+                            console.error(e);
+                            this.folderSuggestions = [];
+                        }
+                    }, 300);
+                },
+
+                selectFolder(folder) {
+                    this.selectedFolder = folder;
+                    this.folderSearch = '';
+                    this.folderSuggestions = [];
+                    if (this.dqlaName.trim()) this.checkDqlaName();
+                },
+
+                removeFolder() {
+                    this.selectedFolder = null;
+                    this.dqlaNameError = '';
+                    this.folderSearch = '';
+                    this.folderSuggestions = [];
+                },
+
+                // ----- ПОИСК ПОСТАВЩИКОВ -----
+                searchSuppliers() {
+                    clearTimeout(this.supplierDebounce);
+                    const q = this.supplierSearch.trim();
+                    if (q.length < 2) { this.supplierSuggestions = []; return; }
+                    this.supplierDebounce = setTimeout(async () => {
+                        try {
+                            const resp = await window.DataOcean.api.post(`/search?searchString=${q}&limit=10&offset=0&objectTypes=User&deepSearch=false&glossaryMode=public&quickSearch=true`);
+                            this.supplierSuggestions = resp.data.searchResults || [];
+                        } catch (e) {
+                            console.error(e);
+                            this.supplierSuggestions = [];
+                        }
+                    }, 300);
+                },
+
+                selectSupplier(s) {
+                    if (!this.selectedSuppliers.some(u => u.id === s.businessId)) {
+                        this.selectedSuppliers.push({ id: s.businessId, name: s.objectName });
+                    }
+                    this.supplierSearch = '';
+                    this.supplierSuggestions = [];
+                },
+
+                removeSupplier(index) {
+                    this.selectedSuppliers.splice(index, 1);
+                },
+
+                // ----- ПРОВЕРКА УНИКАЛЬНОСТИ DQLA -----
+                checkDqlaName() {
+                    clearTimeout(this.checkDebounce);
+                    const name = "DQLA - " + this.dqlaName.trim();
+                    const folderId = this.selectedFolder ? this.selectedFolder.businessId : null;
+                    if (!folderId || !name) {
+                        this.dqlaNameError = '';
+                        return;
+                    }
+                    this.checkDebounce = setTimeout(async () => {
+                        try {
+                            const resp = await window.DataOcean.api.post(`/search?searchString=${encodeURIComponent(name)}&limit=1&offset=0&objectTypes=DQLA&parentId=${folderId}&deepSearch=false&glossaryMode=workplace&quickSearch=true`);
+                            const items = resp.data.searchResults || [];
+                            const exists = items.some(item => {
+                                const n = item.objectName || item.name || '';
+                                return n.toLowerCase() === name.toLowerCase();
+                            });
+                            this.dqlaNameError = exists ? `DQLA с именем "${name}" уже существует в выбранной папке` : '';
+                        } catch (e) {
+                            console.error(e);
+                            this.dqlaNameError = '';
+                        }
+                    }, 500);
+                },
+
+                // ----- ПРЕДПРОСМОТР ИНДИКАТОРОВ -----
+                updateIndicatorGroups() {
+                    const rows = this.selectedRows || [];
+                    if (!rows.length) {
+                        this.indicatorGroupsList = [];
+                        this.errorItemsList = [];
+                        return;
+                    }
+                    const groups = {};
+                    const map = {
+                        "completeness": "Полнота",
+                        "accuracy": "Точность",
+                        "actuality": "Актуальность",
+                        "consistency": "Согласованность",
+                        "uniqueness": "Уникальность"
+                    };
+                    const getCharName = (code) => {
+                        if (!code) return 'Без характеристики';
+                        // Убираем все кавычки (и двойные, и одинарные) из строки
+                        let normalized = code.replace(/["']/g, '').toLowerCase().trim();
+                        return map[normalized] || code;
+                    };
+                    const errors = [];
+                    rows.forEach(row => {
+                        if (this.aggregationType === 'by_characteristic') {
+                            if (!row.dq_kind || !row.dq_kind.trim()) {
+                                errors.push({
+                                    brName: row.brName || 'Без названия',
+                                    checkName: row.implName || 'Без названия'
+                                });
+                                return;
+                            }
+                            const key = getCharName(row.dq_kind);
+                            if (!groups[key]) groups[key] = { key, name: key, type: 'По характеристике', checks: [] };
+                            if (row.implName) groups[key].checks.push(row.implName);
+                        } else {
+                            const key = row.termName && row.termName.trim() ? row.termName : 'Без термина';
+                            const displayName = key === 'Без термина' ? 'Без термина' : `Качество данных ${key}`;
+                            if (!groups[key]) groups[key] = { key, name: displayName, type: 'По термину', checks: [] };
+                            if (row.implName) groups[key].checks.push(row.implName);
+                        }
+                    });
+                    this.indicatorGroupsList = Object.values(groups);
+                    this.errorItemsList = errors;
+                },
+
+                // ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ТАБЛИЦЫ -----
+                makeCell(id, name, entityType) {
+                    if (!name) return '';
+                    let display = name.length > 40 ? name.substring(0, 40) + '...' : name;
+                    const link = id ? `<a href="/work/entity/${entityType}/${id}">${display}</a>` : display;
+                    return link;
+                },
+
+                statusHtml(status) {
+                    if (!status) return '';
+                    const s = Number(status);
+                    const map = {
+                        70: { color: "#237804", bg: "#f6ffed", border: "#b7eb8f", stat: "Опубликован" },
+                        520: { color: "#ad4e00", bg: "#fff7e6", border: "#ffd591", stat: "В разработке" },
+                        50: { color: "#ad4e00", bg: "#fff7e6", border: "#ffd591", stat: "Контроль заполнения" },
+                        10: { color: "#0050b3", bg: "#e6f4ff", border: "#91caff", stat: "Новый/На редактировании" },
+                        222: { color: "#a8071a", bg: "#fff1f0", border: "#ffa39e", stat: "На проверке шаблона" },
+                        30: { color: "#ad4e00", bg: "#fff7e6", border: "#ffd591", stat: "На согласовании" }
+                    };
+                    const style = map[s] || { color: "#595959", bg: "#fafafa", border: "#d9d9d9", stat: String(status) };
+                    return `<span style="color:${style.color};background:${style.bg};border:1px solid ${style.border};padding:2px 6px;border-radius:4px;font-size:12px;font-weight:500;">${style.stat}</span>`;
+                }
+            },
+            mounted() {
+                this.loadData();
+            }
+        });
+        app.mount('#app');
+    }, 2000)
+    </script>
+</body>
+</html>
