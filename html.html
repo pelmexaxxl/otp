@@ -1,248 +1,630 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Quality</title>
+    <link href="/portal/static/falcon.css" rel="stylesheet">
+    <title>Data Quality — DataContract</title>
+    <script src="/portal/static/vue.js"></script>
+    <style>
+        [v-cloak] { display: none !important; }
+        .dq-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0 16px; }
+        .dq-btn { padding:8px 16px; border:0; border-radius:4px; cursor:pointer; color:#fff; }
+        .dq-btn:disabled { background:#ccc !important; cursor:not-allowed; }
+        .dq-btn-check { background:#1890ff; }
+        .dq-btn-dqla { background:#52c41a; }
+        .dq-select-all { display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+        .dq-table-wrap { overflow-x:auto; width:100%; }
+        .dq-table { width:100%; border-collapse:collapse; }
+        .dq-table th, .dq-table td { padding:8px 12px; text-align:left; border-bottom:1px solid #f0f0f0; color:#000; }
+        .dq-table th { background:#f5f5f5; white-space:nowrap; }
+        .dq-group { font-weight:600; background:#fff; }
+        .dq-group-title { display:flex; align-items:center; gap:8px; }
+        .dq-summary { color:#8c8c8c; font-weight:400; font-size:13px; margin-left:8px; }
+        .dq-toggle { cursor:pointer; user-select:none; font-size:12px; }
+        .dq-nested {
+            margin-left:24px;
+            width:calc(100% - 24px);
+            table-layout:fixed;
+        }
+        .dq-link { color:inherit; text-decoration:none; }
+        .dq-link:hover { color:#1890ff; text-decoration:underline; }
+        .dq-error { color:#cf1322; font-size:12px; }
+        .dq-muted { color:#8c8c8c; }
+        .dq-checkbox { width:18px; height:18px; cursor:pointer; }
+        .dq-row-check { background:#e6f4ff; }
+        .dq-row-dqla { background:#f6ffed; }
+        .dq-empty { padding:28px; text-align:center; color:#8c8c8c; }
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; }
+        .modal-content { width:100%; max-width:820px; max-height:90vh; overflow:auto; background:#fff; border-radius:8px; padding:24px; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+        .modal-header h3 { margin:0 0 20px; }
+        .form-group { margin-bottom:16px; }
+        .form-label { display:block; margin-bottom:8px; font-weight:500; }
+        .form-control, .form-select { width:100%; padding:8px 12px; border:1px solid #d9d9d9; border-radius:4px; box-sizing:border-box; }
+        .dqla-item,
+        .dqla-name-input {
+            width:100%;
+            padding:10px 12px;
+            border:1px solid #e8e8e8;
+            border-radius:4px;
+            margin-bottom:8px;
+            font-size:14px;
+            font-weight:600;
+            line-height:1.5;
+            box-sizing:border-box;
+            background:#fff;
+            color:#000;
+        }
+        .dqla-item { cursor:pointer; }
+        .dqla-item:hover { border-color:#52c41a; background:#f6ffed; }
+        .dqla-item.selected,
+        .dqla-name-input.filled { border-color:#52c41a; background:#f6ffed; }
+        .dqla-name-input { display:block; }
+        .dqla-name-input[readonly] { cursor:default; }
+        .dqla-name-input[readonly]:not(.filled) { background:#fafafa; color:#8c8c8c; }
+        .dqla-name-input:focus { outline:none; border-color:#52c41a; box-shadow:0 0 0 2px rgba(82,196,26,.15); }
+        .dqla-name-input::placeholder { font-weight:400; color:#bfbfbf; }
+        .preview { margin-top:20px; border-top:1px solid #f0f0f0; padding-top:16px; }
+        .preview-group { border:1px solid #e8e8e8; border-radius:6px; margin-bottom:12px; overflow:hidden; }
+        .preview-title { padding:10px 12px; font-weight:600; background:#f5f5f5; }
+        .preview-check { padding:7px 12px; border-top:1px solid #f0f0f0; font-size:13px; }
+        .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; padding-top:16px; border-top:1px solid #f0f0f0; }
+        .modal-btn { padding:8px 16px; border-radius:4px; cursor:pointer; border:1px solid #d9d9d9; background:#fff; }
+        .modal-primary { background:#52c41a; color:#fff; border-color:#52c41a; }
+        .modal-primary:disabled { background:#ccc; border-color:#ccc; cursor:not-allowed; }
+        .validation-error { color:#cf1322; font-size:12px; margin-top:5px; }
 
-    <!-- Custom Styles -->
-    <link rel="stylesheet" href="css/style.css">
+        .dq-nested th:nth-child(1),
+        .dq-nested td:nth-child(1) {
+            width: 42px;
+        }
+        
+        .dq-nested th:nth-child(2),
+        .dq-nested td:nth-child(2) {
+            width: 32%;
+        }
+        
+        .dq-nested th:nth-child(3),
+        .dq-nested td:nth-child(3) {
+            width: 34%;
+        }
+        
+        .dq-nested th:nth-child(4),
+        .dq-nested td:nth-child(4) {
+            width: 34%;
+        }
+    </style>
 </head>
-
 <body>
-    <!-- Main Application Container -->
-    <div id="app">
-
-        <!-- Loading State -->
-        <div id="loadingState" class="loading-state hidden">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Загрузка...</span>
-            </div>
-        </div>
-
-        <!-- Error State -->
-        <div id="errorState" class="error-state hidden"></div>
-
-        <!-- Action Panel -->
-        <div class="action-panel-wrapper">
-            <div id="actionButtons" class="action-panel hidden">
-                <div class="action-panel-header">
-                    <div>
-                        <strong>Выбрано: <span id="selectedCount" class="selected-count">0</span></strong>
-                    </div>
-
-                    <div id="statusActions">
-                        <div id="sameStatusBlock">
-                            <!-- Status: New (10) -->
-                            <div id="statusNew" class="status-block">
-                                <button class="btn btn-primary" data-action="status-new">
-                                    Взять в анализ
-                                </button>
-                            </div>
-
-                            <!-- Status: In Analysis -->
-                            <div id="statusInAnalysis" class="status-block">
-                                <button class="btn btn-warning" data-action="to-exception">В исключения</button>
-                                <button class="btn btn-primary" data-action="reassign">Переназначить</button>
-                                <button class="btn btn-danger" data-action="analysis-to-work">В работу</button>
-                            </div>
-
-                            <!-- Status: In Work -->
-                            <div id="statusInWork" class="status-block ">
-                                <button class="btn btn-warning" data-action="to-exception">В исключения</button>
-                                <button class="btn btn-success" data-action="close">Закрыть инцидент</button>
-                                <button class="btn btn-danger" data-action="work-to-wait">В ожидание</button>
-                                <button class="btn btn-primary" data-action="reassign">Переназначить</button>
-                            </div>
-
-                            <!-- Status: Reassigned -->
-                            <div id="statusReassigned" class="status-block ">
-                                <button class="btn btn-warning" data-action="to-exception">В исключения</button>
-                                <button class="btn btn-danger" data-action="reassigned-to-work">В работу</button>
-                            </div>
-
-                            <!-- Status: Waiting -->
-                            <div id="statusWaiting" class="status-block ">
-                                <button class="btn btn-warning" data-action="to-exception">В исключения</button>
-                                <button class="btn btn-danger" data-action="wait-to-work">В работу</button>
-                                <button class="btn btn-success" data-action="close">Закрыть инцидент</button>
-                            </div>
-
-                            <!-- Different Statuses -->
-                            <div id="differentStatus" class="status-warning ">
-                                Выбраны инциденты с разными статусами
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Батоны -->
-                    <button class="btn btn-outline-secondary" id="btnClearAllFilters">
-                        <span>Сбросить все фильтры</span>
-                        <span class="badge bg-danger ms-1" id="activeFiltersCount">0</span>
-                    </button>
-                    <button class="btn" id="btnClearSelection">Очистить выбор</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Table -->
-        <div class="table-container">
-            <table id="errorsTable" class="table">
-                <thead>
-                    <tr>
-                        <th class="checkbox-cell">
-                            <input type="checkbox" id="selectAll" class="select-checkbox">
-                        </th>
-                        <th class="sortable" data-col="1">Идентификатор ошибочной записи</th>
-                        <th class="sortable" data-col="2">Ответственный</th>
-                        <th class="sortable" data-col="3">Исключение</th>
-                        <th class="sortable" data-col="4">Статус</th>
-                        <!-- <th class="sortable" data-col="5">Таблица</th>
-                        <th class="sortable" data-col="6">Атрибут таблицы</th> -->
-                        <th class="sortable" data-col="7">Комментарий</th>
-                        <th class="edit-btn-header"></th>
-                    <tr class="filter-row">
-                        <th class="checkbox-cell"></th>
-                        <th data-col="1"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th data-col="2">
-                            <div class="dropdown-filter">
-                                <input type="text" class="col-filter dropdown-filter-input"
-                                    placeholder="Выберите ответственных..." data-col="2" readonly>
-                                <div class="dropdown-filter-list hidden"></div>
-                                <button class="clear-filter-btn" data-col="2">×</button>
-                            </div>
-                        </th>
-                        <th data-col="3">
-                            <div class="dropdown-filter">
-                                <input type="text" class="col-filter dropdown-filter-input"
-                                    placeholder="Выберите исключения..." data-col="3" readonly>
-                                <div class="dropdown-filter-list hidden"></div>
-                                <button class="clear-filter-btn" data-col="3">×</button>
-                            </div>
-                        </th>
-                        <th data-col="4">
-                            <div class="dropdown-filter">
-                                <input type="text" class="col-filter dropdown-filter-input"
-                                    placeholder="Выберите статусы..." data-col="4" readonly>
-                                <div class="dropdown-filter-list hidden"></div>
-                                <button class="clear-filter-btn" data-col="4">×</button>
-                            </div>
-                        </th>
-                        <th data-col="7"><input type="text" class="col-filter" placeholder="Фильтр..."></th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Data will be inserted here -->
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Edit Modal -->
-        <div id="editModal" class="custom-modal-overlay">
-            <div class="custom-modal">
-                <div class="custom-modal-header">
-                    <h3>Редактирование инцидентов</h3>
-                    <button class="modal-close" id="modalClose">&times;</button>
-                </div>
-                <div class="custom-modal-body">
-                    <div class="form-group">
-                        <label>Выбрано инцидентов: <span id="selectedCountModal">0</span></label>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="tableName">Таблица БД:</label>
-                        <select id="tableName" class="form-control">
-                            <option value="">-- Выберите таблицу --</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="tableAttribute">Атрибут таблицы БД:</label>
-                        <select id="tableAttribute" class="form-control" disabled>
-                            <option value="">-- Сначала выберите таблицу --</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="exceptionSelect">Исключение:</label>
-                        <select id="exceptionSelect" class="form-control">
-                            <option value="">-- Выберите исключение --</option>
-                            <option value="true">Да</option>
-                            <option value="false">Нет</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="statusSelect">Статус:</label>
-                        <select id="statusSelect" class="form-control">
-                            <option value="">-- Выберите статус --</option>
-                            <option value="10">Новый</option>
-                            <option value="В анализе">В анализе</option>
-                            <option value="В работе">В работе</option>
-                            <option value="Переназначен">Переназначен</option>
-                            <option value="В ожидании">В ожидании</option>
-                            <option value="Ожидание">Ожидание</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="ownerInput">Ответственный:</label>
-                        <div class="autocomplete-container">
-                            <input type="text" id="ownerInput" class="form-control"
-                                placeholder="Начните вводить имя...">
-                            <div id="suggestionsList" class="suggestions-list"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="commentInput">Комментарий:</label>
-                        <textarea id="commentInput" class="form-control" rows="3"
-                            placeholder="Введите комментарий..."></textarea>
-                    </div>
-                </div>
-                <div class="custom-modal-footer">
-                    <button class="btn btn-cancel" id="btnCancel">Отмена</button>
-                    <button class="btn btn-primary" id="btnSave">Сохранить изменения</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- View ID Modal -->
-        <div id="viewIdModal" class="custom-modal-overlay">
-            <div class="custom-modal view-id-modal">
-                <div class="custom-modal-header">
-                    <h3>Идентификатор ошибочной записи</h3>
-                    <button class="modal-close" id="viewIdModalClose">&times;</button>
-                </div>
-                <div class="custom-modal-body">
-                    <div class="form-group">
-                        <label>Полный текст:</label>
-                        <div id="idContent" class="id-content"></div>
-                    </div>
-                </div>
-                <div class="custom-modal-footer">
-                    <button class="btn btn-cancel" id="btnCopyId">Копировать</button>
-                    <button class="btn btn-primary" id="btnCloseViewId">Закрыть</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pagination -->
-        <div id="paginationContainer" class="pagination-container"></div>
+<div id="app" v-cloak>
+    <div class="dq-controls">
+        <label class="dq-select-all">
+            <input type="checkbox" class="dq-checkbox" :checked="allSelected" @change="toggleAll($event)">
+            Выбрать все
+        </label>
+        <button type="button" class="dq-btn dq-btn-check" v-show="selectedChecksCount > 0" @click="createSelectedChecks" :disabled="isCreatingChecks">
+            {{ isCreatingChecks ? 'Создание...' : `Создать проверки качества (${selectedChecksCount})` }}
+        </button>
+        <button type="button" class="dq-btn dq-btn-dqla" v-show="selectedDqlaCount > 0" @click="openDqlaModal">
+            Создать DQLA ({{ selectedDqlaCount }})
+        </button>
     </div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <div v-if="loading" class="dq-empty">Загрузка...</div>
+    <div v-else-if="!groupedData.length" class="dq-empty">В DataContract не указаны SS_FSD источника.</div>
 
-    <!-- Axios -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <div v-else class="dq-table-wrap">
+        <table class="dq-table">
+            <tbody>
+            <template v-for="(group, groupIdx) in groupedData" :key="group.fsdId">
+                <tr class="dq-group">
+                    <td colspan="4">
+                        <div class="dq-group-title">
+                            <input type="checkbox" class="dq-checkbox" :checked="isGroupSelected(group)" @change="toggleGroup(group, $event)">
+                            <span class="dq-toggle" @click="group.expanded = !group.expanded">{{ group.expanded ? '▼' : '▶' }}</span>
+                            <a class="dq-link" :href="`/work/entity/SS_FSD/${group.fsdId}`" target="_blank">{{ group.fsdName }}</a>
+                            <span v-if="group.schemaName || group.tableName" class="dq-muted">{{ [group.schemaName, group.tableName].filter(Boolean).join('.') }}</span>
+                            <span class="dq-summary">Создано проверок {{ group.createdChecks }} из {{ group.totalChecks }}</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr v-show="group.expanded">
+                    <td colspan="4">
+                        <div>
+                            <table class="dq-table dq-nested">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Бизнес-правило</th>
+                                        <th>Проверка</th>
+                                        <th>DQLA</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in group.rows" :key="rowKey(row)" :class="row.implId ? 'dq-row-dqla' : 'dq-row-check'">
+                                        <td>
+                                            <input type="checkbox" class="dq-checkbox"
+                                                   :checked="isChecked(row)"
+                                                   :disabled="isRowDisabled(row)"
+                                                   @change="toggleRow(row, $event)">
+                                        </td>
+                                        <td>
+                                            <a class="dq-link" :href="`/work/entity/DQBusinessRule/${row.brId}`" target="_blank">{{ row.brName }}</a>
+                                            <div v-if="row.errors" class="dq-error">{{ row.errors }}</div>
+                                            <div v-else-if="!row.dqImplSampleId && !row.implId" class="dq-muted" style="font-size:12px">Шаблон отсутствует — будет создана ручная проверка</div>
+                                        </td>
+                                        <td>
+                                            <a v-if="row.implId" class="dq-link" :href="`/work/entity/DQImplementation/${row.implId}`" target="_blank">{{ row.implName }}</a>
+                                            <span v-else class="dq-muted">Не создана</span>
+                                        </td>
+                                        <td>
+                                            <template v-if="row.dqlaList && row.dqlaList.length">
+                                                <a v-for="dqla in row.dqlaList" :key="dqla.id" class="dq-link" :href="`/work/entity/DQLA/${dqla.id}`" target="_blank" style="display:block">{{ dqla.name }}</a>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            </template>
+            </tbody>
+        </table>
+    </div>
 
-    <!-- Application -->
-    <script src="js/app.js"></script>
+    <div v-if="modalOpen" class="modal-overlay" @click.self="closeModal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Создание DQLA</h3></div>
+
+            <div v-if="step === 1">
+                <div class="form-group">
+                    <label class="form-label">Действие</label>
+                    <select class="form-select" v-model="action" @change="onActionChange">
+                        <option value="new">Создать новый DQLA</option>
+                        <option value="view">Добавить проверки в существующий DQLA</option>
+                    </select>
+                </div>
+
+                <template v-if="action === 'new'">
+                    <div class="form-group">
+                        <label class="form-label">Имя DQLA</label>
+                        <input class="dqla-name-input" :value="dqlaName" readonly
+                               :class="{filled: !!dqlaName}"
+                               placeholder="Название контракта недоступно">
+                        <div v-if="dqlaNameError" class="validation-error">{{ dqlaNameError }}</div>
+                        <div v-else-if="!dqlaName" class="dq-muted" style="font-size:12px; margin-top:5px">
+                            Не удалось определить название контракта — создание нового DQLA недоступно
+                        </div>
+                    </div>
+                </template>
+
+                <template v-else>
+                    <div class="form-group">
+                        <label class="form-label">Существующий DQLA</label>
+                        <div v-if="!dqlaList.length" class="dq-muted">Для выбранных проверок DQLA пока не найдены.</div>
+                        <div v-for="dqla in dqlaList" :key="dqla.id" class="dqla-item" :class="{selected: selectedExistingDqla && selectedExistingDqla.id === dqla.id}" @click="selectedExistingDqla = dqla">
+                            {{ dqla.name }}
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div v-else class="preview">
+                <div class="form-label">Будут добавлены проверки:</div>
+                <div v-for="group in indicatorGroupsList" :key="group.name" class="preview-group">
+                    <div class="preview-title">{{ group.name }}</div>
+                    <div v-for="check in group.checks" :key="check" class="preview-check">{{ check }}</div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="modal-btn" v-if="step === 2" @click="step = 1">Назад</button>
+                <button type="button" class="modal-btn" @click="closeModal">Отмена</button>
+                <button type="button" class="modal-btn modal-primary" @click="handleModalAction" :disabled="isCreatingDqla || (step === 1 && !isStep1Valid)">
+                    {{ step === 1 ? 'Далее' : (isCreatingDqla ? 'Создание...' : 'Создать') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+setTimeout(() => {
+    const app = Vue.createApp({
+        data() {
+            return {
+                contractId: null,
+                contractName: '',
+                rawData: [],
+                groupedData: [],
+                loading: false,
+                selectedChecks: new Set(),
+                selectedDqla: new Set(),
+                isCreatingChecks: false,
+
+                modalOpen: false,
+                step: 1,
+                action: 'new',
+                isCreatingDqla: false,
+                selectedRows: [],
+
+                mainFolderId: 630042,
+                dqlaNameError: '',
+
+                dqlaList: [],
+                selectedExistingDqla: null,
+                indicatorGroupsList: []
+            };
+        },
+        computed: {
+            selectedChecksCount() { return this.selectedChecks.size; },
+            selectedDqlaCount() { return this.selectedDqla.size; },
+            dqlaName() {
+                return this.contractName ? `DQLA - ${this.contractName}` : '';
+            },
+            selectableRows() {
+                return this.groupedData.flatMap(g => g.rows).filter(r => !this.isRowDisabled(r));
+            },
+            allSelected() {
+                if (!this.selectableRows.length) return false;
+                return this.selectableRows.every(row => this.isChecked(row));
+            },
+            isStep1Valid() {
+                if (this.action === 'view') return !!this.selectedExistingDqla;
+                return !!(this.dqlaName && !this.dqlaNameError);
+            }
+        },
+        methods: {
+			getPlatformDO() {
+                try {
+                    if (window.DataOcean) return window.DataOcean;
+                } catch (e) {}
+            
+                try {
+                    if (window.parent && window.parent.DataOcean) return window.parent.DataOcean;
+                } catch (e) {}
+            
+                try {
+                    if (window.top && window.top.DataOcean) return window.top.DataOcean;
+                } catch (e) {}
+            
+                return null;
+            },
+            
+            getEntityContextDO() {
+                try {
+                    const platformDO = this.getPlatformDO();
+                    return platformDO?.subscriptions?.getEntityContext?.() || null;
+                } catch (e) {
+                    console.warn('Не удалось получить entity через DO:', e);
+                    return null;
+                }
+            },
+            
+            getCurrentContractName() {
+                return this.getEntityContextDO()?.name || null;
+            },
+            
+            async platformPost(url) {
+                const apiUrl = url.startsWith('/api/')
+                    ? url
+                    : `/api${url}`;
+            
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+                        'Content-Type': 'application/json;charset=utf-8'
+                    }
+                });
+            
+                const text = await response.text();
+            
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+            
+                let data;
+            
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    throw new Error(`Не удалось разобрать ответ /search: ${text}`);
+                }
+            
+                return { data };
+            },
+            
+            getCurrentEntityId() {
+                const entityId = this.getEntityContextDO()?.id;
+                if (entityId) return entityId;
+            
+                const paths = [];
+            
+                try {
+                    paths.push(window.location.pathname);
+                } catch (e) {}
+            
+                try {
+                    paths.push(window.parent.location.pathname);
+                } catch (e) {}
+            
+                try {
+                    paths.push(window.top.location.pathname);
+                } catch (e) {}
+            
+                for (const path of paths) {
+                    const match = path?.match(/\/work\/entity\/DataContract\/(\d+)/i);
+                    if (match) return match[1];
+                }
+            
+                return null;
+            },
+            async loadData() {
+                this.contractId = this.getCurrentEntityId();
+                this.contractName = this.getCurrentContractName();
+            
+                if (!this.contractId) {
+                    console.error('Не удалось определить BID текущего DataContract');
+                    return;
+                }
+            
+                console.log('DataContract BID:', this.contractId, 'name:', this.contractName);
+                this.loading = true;
+                try {
+                    const response = await fetch(`/api/groovy/script/DQElementsDataContract.groovy?data_contract_id=${this.contractId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json; charset=utf-8',
+                            Authorization: `Bearer ${localStorage.getItem('authToken')}`
+                        }
+                    });
+                    if (!response.ok) throw new Error(await response.text());
+                    this.rawData = await response.json();
+                    this.buildGroups();
+                } catch (e) {
+                    console.error(e);
+                    alert('Не удалось загрузить Data Quality: ' + e.message);
+                } finally {
+                    this.loading = false;
+                }
+            },
+
+            buildGroups() {
+                const map = new Map();
+                (this.rawData || []).forEach(row => {
+                    const key = String(row.fsdId);
+                    if (!map.has(key)) {
+                        map.set(key, {
+                            fsdId: row.fsdId,
+                            fsdName: row.fsdName,
+                            schemaName: row.schemaName,
+                            tableName: row.tableName,
+                            expanded: false,
+                            rows: []
+                        });
+                    }
+                    map.get(key).rows.push(row);
+                });
+
+                this.groupedData = Array.from(map.values()).map(group => {
+                    const uniqueRules = new Set(group.rows.map(r => String(r.brId)));
+                    const createdRules = new Set(group.rows.filter(r => r.implId).map(r => String(r.brId)));
+                    return {...group, totalChecks: uniqueRules.size, createdChecks: createdRules.size};
+                });
+            },
+
+            rowKey(row) {
+                return `${row.fsdId}|${row.brId}|${row.implId || 'new'}`;
+            },
+            mode(row) { return row.implId ? 'dqla' : 'check'; },
+            isRowDisabled(row) { return !!row.errors || !row.fsdId || !row.brId || !row.tableId; },
+            isChecked(row) { return this.mode(row) === 'dqla' ? this.selectedDqla.has(row) : this.selectedChecks.has(row); },
+            toggleRow(row, event) {
+                const set = this.mode(row) === 'dqla' ? this.selectedDqla : this.selectedChecks;
+                event.target.checked ? set.add(row) : set.delete(row);
+            },
+            toggleGroup(group, event) {
+                group.rows.forEach(row => {
+                    if (this.isRowDisabled(row)) return;
+                    const set = this.mode(row) === 'dqla' ? this.selectedDqla : this.selectedChecks;
+                    event.target.checked ? set.add(row) : set.delete(row);
+                });
+            },
+            isGroupSelected(group) {
+                const rows = group.rows.filter(r => !this.isRowDisabled(r));
+                return !!rows.length && rows.every(r => this.isChecked(r));
+            },
+            toggleAll(event) {
+                const checked = event.target.checked;
+                if (!checked) {
+                    this.selectedChecks.clear();
+                    this.selectedDqla.clear();
+                    return;
+                }
+                this.selectableRows.forEach(row => {
+                    const set = this.mode(row) === 'dqla' ? this.selectedDqla : this.selectedChecks;
+                    set.add(row);
+                });
+            },
+
+            async createSelectedChecks() {
+                const items = Array.from(this.selectedChecks);
+                if (!items.length) return;
+                if (!confirm(`Создать ${items.length} проверок?`)) return;
+                this.isCreatingChecks = true;
+                let created = 0;
+                const errors = [];
+                try {
+                    const batchSize = 5;
+                    for (let i = 0; i < items.length; i += batchSize) {
+                        const batch = items.slice(i, i + batchSize);
+                        const results = await Promise.all(batch.map(async row => {
+                            const params = new URLSearchParams({
+    							data_contract_id: this.contractId || '',
+                              	table_id: row.tableId || '',
+                                fsd_id: row.fsdId || '',
+                                br_id: row.brId || '',
+                                br_name: row.brName || '',
+                                dq_impl_sample_id: row.dqImplSampleId || ''
+                            });
+                            const response = await fetch(`/api/groovy/script/CreateImplFromSampleDataContract.groovy?${params}`, {
+                                method: 'POST',
+                                headers: {Authorization: `Bearer ${localStorage.getItem('authToken')}`}
+                            });
+                            // const text = await response.text();
+                            // if (!response.ok) throw new Error(`${row.fsdName} / ${row.brName}: ${text}`);
+                          	const text = await response.text();
+
+                            if (!response.ok) {
+                                let message = text;
+                            
+                                try {
+                                    const error = JSON.parse(text);
+                                    message =
+                                        error.message ||
+                                        error.detailList?.[0]?.message ||
+                                        text;
+                                } catch (_) {}
+                            
+                                throw new Error(`${row.fsdName} / ${row.brName}: ${message}`);
+                            }
+                            return text;
+                        }).map(p => p.then(v => ({ok:true, value:v})).catch(e => ({ok:false, error:e}))));
+
+                        results.forEach(r => {
+                            if (r.ok) created++;
+                            else errors.push(r.error.message);
+                        });
+                    }
+                } finally {
+                    this.isCreatingChecks = false;
+                }
+
+                if (errors.length) {
+                    alert(`Успешно: ${created}. Ошибок: ${errors.length}\n\n${errors.slice(0, 10).join('\n\n')}`);
+                } else {
+                    alert(`Обработано проверок: ${created}`);
+                }
+                if (created) location.reload();
+            },
+
+            openDqlaModal() {
+                this.selectedRows = Array.from(this.selectedDqla);
+                if (!this.selectedRows.length) return;
+                this.modalOpen = true;
+                this.step = 1;
+                this.action = 'new';
+                this.dqlaNameError = '';
+                this.selectedExistingDqla = null;
+                this.dqlaList = this.extractUniqueDqla(this.rawData);
+                this.updateIndicatorGroups();
+                this.checkDqlaName();
+            },
+            onActionChange() {
+                if (this.action === 'new') this.checkDqlaName();
+            },
+            closeModal() {
+                this.modalOpen = false;
+                this.step = 1;
+                this.isCreatingDqla = false;
+                this.selectedRows = [];
+                this.indicatorGroupsList = [];
+            },
+            extractUniqueDqla(data) {
+                const map = new Map();
+                (data || []).forEach(row => (row.dqlaList || []).forEach(dqla => {
+                    if (dqla && dqla.id && dqla.name && !map.has(String(dqla.id))) map.set(String(dqla.id), dqla);
+                }));
+                return Array.from(map.values());
+            },
+            updateIndicatorGroups() {
+                const groups = new Map();
+                const kindMap = {
+                    completeness: 'Полнота', accuracy: 'Точность', actuality: 'Актуальность',
+                    consistency: 'Согласованность', uniqueness: 'Уникальность'
+                };
+                this.selectedRows.forEach(row => {
+                    let raw = (row.dq_kind || '').toString().replace(/["']/g, '').trim().toLowerCase();
+                    const name = kindMap[raw] || (raw ? row.dq_kind : 'Технические проверки');
+                    if (!groups.has(name)) groups.set(name, {name, checks: []});
+                    groups.get(name).checks.push(row.implName || row.brName);
+                });
+                this.indicatorGroupsList = Array.from(groups.values());
+            },
+            async handleModalAction() {
+                if (this.step === 1) {
+                    if (!this.isStep1Valid) return;
+                    this.step = 2;
+                    this.updateIndicatorGroups();
+                    return;
+                }
+                await this.createDqla();
+            },
+            async createDqla() {
+                if (this.isCreatingDqla || !this.selectedRows.length) return;
+                this.isCreatingDqla = true;
+                try {
+                    const kindMap = {
+                        completeness: 'Полнота', accuracy: 'Точность', actuality: 'Актуальность',
+                        consistency: 'Согласованность', uniqueness: 'Уникальность'
+                    };
+                    const indicators = {};
+                    this.selectedRows.forEach(row => {
+                        let raw = (row.dq_kind || '').toString().replace(/["']/g, '').trim().toLowerCase();
+                        const indicatorName = kindMap[raw] || (raw ? row.dq_kind : 'Технические проверки');
+                        if (!indicators[indicatorName]) indicators[indicatorName] = [];
+                        indicators[indicatorName].push({id: row.implId, name: row.implName});
+                    });
+
+                    const body = {
+                        data_contract_id: this.contractId,
+                        fsd_ids: [...new Set(this.selectedRows.map(r => r.fsdId))],
+                        indicators
+                    };
+                    if (this.action === 'view') {
+                        body.copy_from_dqla_id = this.selectedExistingDqla.id;
+                    } else {
+                        body.dqla_folder = this.mainFolderId;
+                        body.dqla_name = this.dqlaName;
+                    }
+
+                    const response = await fetch('/api/groovy/script/CreateDQLAfromDataContract.groovy', {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+                            'Content-Type': 'application/json;charset=utf-8'
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    const text = await response.text();
+                    if (!response.ok) throw new Error(text);
+                    this.closeModal();
+                    location.reload();
+                } catch (e) {
+                    console.error(e);
+                    alert('Ошибка создания DQLA: ' + e.message);
+                } finally {
+                    this.isCreatingDqla = false;
+                }
+            },
+            
+            async checkDqlaName() {
+                this.dqlaNameError = '';
+                const name = this.dqlaName;
+                if (!name) return;
+                try {
+                    const resp = await this.platformPost(`/search?searchString=${encodeURIComponent(name)}&limit=10&offset=0&objectTypes=DQLA&parentId=${this.mainFolderId}&deepSearch=false&glossaryMode=workplace&quickSearch=true`);
+                    const exists = (resp.data.searchResults || []).some(item => (item.objectName || '').toLowerCase() === name.toLowerCase());
+                    this.dqlaNameError = exists ? `DQLA с именем "${name}" уже существует` : '';
+                } catch (e) { this.dqlaNameError = ''; }
+            }
+        },
+        mounted() { this.loadData(); }
+    });
+    app.mount('#app');
+}, 2000);
+</script>
 </body>
-
 </html>
