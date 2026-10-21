@@ -1424,19 +1424,32 @@ def runMain(instance) {
                                     def uniqueColsSelect = getColumnsNoAlias(instance, 'dbObjectLink', tmpTable1)
                                     def groupByCols      = uniqueColsSelect
 
-                                    // конкатенированный PK (если несколько колонок PK)
-                                    def pkConcat = getConcatColumns(instance, 'dbObjectLinkPKcol', tmpTable1)
-                                    // подстрахуемся, если по какой-то причине pkConcat пуст
-                                    // def pkAggExpr = pkConcat ? "string_agg((${pkConcat})::text, ',')" : "string_agg(${tmpTable1}.${instance.attrByName('dbObjectLinkPKcol')[0].name}::text, ',')" // было
-                                    def pkAggExpr = pkConcat ? "${pkConcat}" : "${tmpTable1}.${instance.attrByName('dbObjectLinkPKcol')[0].name}" // стало
+                                    def pkNames  = getRefs(instance, 'dbObjectLinkPKcol').collect { it.name() }
+                                    def chkNames = getRefs(instance, 'dbObjectLink').collect { it.name() }
 
-                                    selectBadSql =
-                                        " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt, ${pkAggExpr} AS pk_list " +
-                                        fromClause +
-                                        " group by ${groupByCols} having COUNT(*) > 1"
+                                    // Сценарий 2: атрибуты Идентификатора записи входят в проверяемые атрибуты.
+                                    // string_agg не используется, атрибуты выводятся в первоначальном виде.
+                                    if (pkNames.every { chkNames.contains(it) }) {
+                                        selectBadSql =
+                                            " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt " +
+                                            fromClause +
+                                            " group by ${groupByCols} having COUNT(*) > 1"
+                                    }
+                                    // Сценарий 1: атрибуты Идентификатора записи не совпадают с проверяемыми.
+                                    // Значения Идентификатора записи агрегируются через string_agg.
+                                    else {
+                                        def pkExpr    = pkNames.collect { "${tmpTable1}.${it}::text" }.join(" || '|' || ")
+                                        def pkAlias   = pkNames[0]
+                                        // Комментарий с составом string_agg нужен только для нескольких атрибутов.
+                                        def pkComment = pkNames.size() > 1 ? "\n -- Идентификатор записи: ${pkNames.join('|')}\n" : ' '
+                                        selectBadSql =
+                                            " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt, " +
+                                            "string_agg(${pkExpr}, ',') AS ${pkAlias}" +
+                                            pkComment +
+                                            fromClause +
+                                            " group by ${groupByCols} having COUNT(*) > 1"
+                                    }
                                 }
-                                break
-
                                 break
                             case 'relevance':
                                 needGenSelect = 0
