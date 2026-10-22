@@ -227,11 +227,13 @@ def extractUsers(String jsonStr) {
     if (!jsonStr) {
         return []
     }
-    def parsed = new groovy.json.JsonSlurper().parseText(jsonStr)
-    def list = (parsed instanceof Collection) ? parsed : [parsed]
-    return list.findAll { it?.id != null }.collect {
-        [id: it.id as Long, name: it.name as String]
+    def users = []
+    def pattern = ~/"id":\s*(\d+),\s*"name":\s*"([^"]+)"/
+    def matcher = pattern.matcher(jsonStr)
+    while (matcher.find()) {
+        users << [id: matcher.group(1) as Long, name: matcher.group(2)]
     }
+    return users
 }
 
 def buildProvider(Long id, String name) {
