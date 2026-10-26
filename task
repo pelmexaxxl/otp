@@ -1,1 +1,46 @@
-123
+На вкладке DQ - Реализация - заменить Тип проверки Актуальность на:
+
+Актуальность ко времени
+
+Актуальность ко дню.
+
+
+
+
+Шаблон проверки в обоих случаях для - Скрипт отбора данных - SELECT 1.
+
+ 
+Скрипт выполнения проверки:
+ 
+при выборе Актуальность ко времени:
+ 
+select
+    0 }}{{as cnt,
+    current_date::date as check_dttm
+where not exists (
+    select 1
+    from utl_core.load_ods_ctl
+    where schema_nm = }}{{'*' --схема проверяемого объект
+      and table_nm = }}{{'*' -- наименование таблицы
+      and sys_ts >= }}{{current_date                   
+      and sys_ts <  }}{{current_date + interval }}{{'* hours'  --до какого времени должна быть произведена проврека (указать час)
+)
+{{}}
+{{}}
+{{}}
+{{}}
+Скрипт выполнения проверки:
+ 
+при выборе Актуальность ко дню:
+ 
+select
+    0 }}{{as cnt,
+    current_date::date as check_dttm
+where not exists (
+    select 1
+    from utl_core.load_ods_ctl
+    where schema_nm = }}{{{}'*'--схема проверяемого объект{}
+      and table_nm = }}{{{}'*'-- наименование таблицы{}
+      and sys_ts::date = }}{{current_date   --наличие загрузки за текущую дату     
+   )
+ 
