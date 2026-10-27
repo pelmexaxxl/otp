@@ -1235,7 +1235,7 @@ def runMain(instance) {
         isStandard = false
     // clearUnoTableChecks()
     }
-    else if (dq_type in ['notnull', 'unique', 'template']) {
+    else if (dq_type in ['notnull', 'unique', 'unique_pk', 'template']) {
         // LOG.info('\n\n\nIM HERE 2\n\n\n')
         instance.replaceAttr('intervalStartStr', '')
         // LOG.info('\n\n\nREPLACED\n\n\n')
@@ -1424,31 +1424,31 @@ def runMain(instance) {
                                     def uniqueColsSelect = getColumnsNoAlias(instance, 'dbObjectLink', tmpTable1)
                                     def groupByCols      = uniqueColsSelect
 
-                                    def pkNames  = getRefs(instance, 'dbObjectLinkPKcol').collect { it.name() }
-                                    def chkNames = getRefs(instance, 'dbObjectLink').collect { it.name() }
+                                    def pkNames = getRefs(instance, 'dbObjectLinkPKcol').collect { it.name() }
 
-                                    // Сценарий 2: атрибуты Идентификатора записи входят в проверяемые атрибуты.
-                                    // string_agg не используется, атрибуты выводятся в первоначальном виде.
-                                    if (pkNames.every { chkNames.contains(it) }) {
-                                        selectBadSql =
-                                            " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt " +
-                                            fromClause +
-                                            " group by ${groupByCols} having COUNT(*) > 1"
-                                    }
-                                    // Сценарий 1: атрибуты Идентификатора записи не совпадают с проверяемыми.
                                     // Значения Идентификатора записи агрегируются через string_agg.
-                                    else {
-                                        def pkExpr    = pkNames.collect { "${tmpTable1}.${it}::text" }.join(" || '|' || ")
-                                        def pkAlias   = pkNames[0]
-                                        // Комментарий с составом string_agg нужен только для нескольких атрибутов.
-                                        def pkComment = pkNames.size() > 1 ? "\n -- Идентификатор записи: ${pkNames.join('|')}\n" : ' '
-                                        selectBadSql =
-                                            " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt, " +
-                                            "string_agg(${pkExpr}, ',') AS ${pkAlias}" +
-                                            pkComment +
-                                            fromClause +
-                                            " group by ${groupByCols} having COUNT(*) > 1"
-                                    }
+                                    def pkExpr    = pkNames.collect { "${tmpTable1}.${it}::text" }.join(" || '|' || ")
+                                    def pkAlias   = pkNames[0]
+                                    // Комментарий с составом string_agg нужен только для нескольких атрибутов.
+                                    def pkComment = pkNames.size() > 1 ? "\n -- Идентификатор записи: ${pkNames.join('|')}\n" : ' '
+                                    selectBadSql =
+                                        " SELECT ${uniqueColsSelect}, COUNT(*) AS cnt, " +
+                                        "string_agg(${pkExpr}, ',') AS ${pkAlias}" +
+                                        pkComment +
+                                        fromClause +
+                                        " group by ${groupByCols} having COUNT(*) > 1"
+                                }
+                                break
+                            case 'unique_pk':
+                                needGenSelect = 0
+                                if (CheckPKColumns(instance, newStatus) == 1) {
+                                    // Проверяемые атрибуты совпадают с Идентификатором записи.
+                                    // string_agg не используется, атрибуты выводятся в первоначальном виде.
+                                    def pkColsSelect = getColumnsNoAlias(instance, 'dbObjectLink', tmpTable1)
+                                    selectBadSql =
+                                        " SELECT ${pkColsSelect}, COUNT(*) AS cnt " +
+                                        fromClause +
+                                        " group by ${pkColsSelect} having COUNT(*) > 1"
                                 }
                                 break
                             case 'relevance':
