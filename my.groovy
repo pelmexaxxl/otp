@@ -659,6 +659,100 @@ int CheckPKColumns(def instance, def newStatus) {
 }
 
 /**********************************
+ * Relevance (Актуальность) helpers
+ **********************************/
+/**
+ * Возвращает имя схемы проверяемого объекта (из атрибута dbSchema).
+ * Значение может приходить как список ссылок, так и одиночным объектом.
+ */
+def getRelevanceSchemaName(def instance) {
+    def v = instance?.attrByName('dbSchema')
+    if (v instanceof Collection) v = v ? v[0] : null
+    return v?.name
+}
+
+/**
+ * Возвращает имя таблицы проверяемого объекта.
+ * Для DQDBSource берётся таблица из dbObjectLink, иначе — сам источник.
+ */
+def getRelevanceTableName(def instance) {
+    def checking_source = getRefs(instance, 'checking_source')
+    if (!checking_source) return null
+    def srcObj = instanceService.getInstance(checking_source[0].id())
+    if (!srcObj) return null
+    if (srcObj.getMetaClassName() == 'DQDBSource') {
+        def dbObjLink = srcObj.attrByName('dbObjectLink')
+        if (dbObjLink && dbObjLink[0]) {
+            def tbl = instanceService.getInstance(dbObjLink[0].id())
+            return tbl?.name
+        }
+        return srcObj.attrByName('tmp_table_name')
+    }
+    return srcObj.name
+}
+
+/**
+ * Формирует SQL для проверок «Актуальность ко времени» (relevance_hours)
+ * и «Актуальность ко дню» (relevance_day).
+ *
+ * По имени схемы определяется таблица контроля загрузки:
+ *   '%ods_%' -> utl_core.load_ods_ctl
+ *   '%dm_%'  -> utl_core.load_dm_ctl
+ *   иначе    -> проверка запрещена (DDS) — вместо скрипта пишется комментарий.
+ *
+ * @return [selectAllSql, selectBadSql]
+ */
+def buildRelevanceSql(def instance, String dq_type) {
+    String selectAllSql = 'SELECT 1'
+    String selectBadSql
+
+    String schemaName = getRelevanceSchemaName(instance)
+    String tableName  = getRelevanceTableName(instance)
+
+    String loadCtlTable = null
+    if (schemaName) {
+        String s = schemaName.toLowerCase()
+        if (s.contains('ods_'))      loadCtlTable = 'utl_core.load_ods_ctl'
+        else if (s.contains('dm_'))  loadCtlTable = 'utl_core.load_dm_ctl'
+    }
+
+    if (!loadCtlTable) {
+        selectBadSql = '-- проверка на объект DDS запрещена'
+        return [selectAllSql, selectBadSql]
+    }
+
+    if (dq_type == 'relevance_hours') {
+        def hours = instance.attrByName('intervalStartStr')
+        selectBadSql =
+            "select\n" +
+            "    0 as cnt,\n" +
+            "    current_date::date as check_dttm\n" +
+            "where not exists (\n" +
+            "    select 1\n" +
+            "    from ${loadCtlTable}\n" +
+            "    where schema_nm = '${schemaName}'\n" +
+            "      and table_nm = '${tableName}'\n" +
+            "      and sys_ts >= current_date\n" +
+            "      and sys_ts < current_date + interval '${hours} hours'\n" +
+            ")"
+    } else {
+        selectBadSql =
+            "select\n" +
+            "    0 as cnt,\n" +
+            "    current_date::date as check_dttm\n" +
+            "where not exists (\n" +
+            "    select 1\n" +
+            "    from ${loadCtlTable}\n" +
+            "    where schema_nm = '${schemaName}'\n" +
+            "      and table_nm = '${tableName}'\n" +
+            "      and sys_ts::date = current_date\n" +
+            ")"
+    }
+
+    return [selectAllSql, selectBadSql]
+}
+
+/**********************************
  * Scripts: filter_script
  **********************************/
  /**
@@ -1451,20 +1545,13 @@ def runMain(instance) {
                                         " group by ${pkColsSelect} having COUNT(*) > 1"
                                 }
                                 break
-                            case 'relevance':
+                            case 'relevance_hours':
+                            case 'relevance_day':
                                 needGenSelect = 0
 
-                                selectAllSql = 'SELECT 1'
-
-                                selectBadSql =
-                                    "select \n" +
-                                    "  0 as cnt,\n" +
-                                    "  current_date::date as check_dttm\n" +
-                                    "where not exists (\n" +
-                                    "  select 1\n" +
-                                    "  ${fromClause}\n" +
-                                    "  where dm_load_ts::date = current_date::date\n" +
-                                    ")"
+                                def relSql = buildRelevanceSql(instance, dq_type)
+                                selectAllSql = relSql[0]
+                                selectBadSql = relSql[1]
 
                                 break
                             case 'template':
@@ -1521,20 +1608,12 @@ def runMain(instance) {
                             default:
                                 selectBadSql = fromClause
                         }
-                    } else if (dq_type == 'relevance') {
+                    } else if (dq_type in ['relevance_hours', 'relevance_day']) {
                         needGenSelect = 0
-                        
-                        selectAllSql = 'SELECT 1'
 
-                        selectBadSql =
-                            "select \n" +
-                            "  0 as cnt,\n" +
-                            "  current_date::date as check_dttm\n" +
-                            "where not exists (\n" +
-                            "  select 1\n" +
-                            "  ${fromClause}\n" +
-                            "  where dm_load_ts::date = current_date::date\n" +
-                            ")"
+                        def relSql = buildRelevanceSql(instance, dq_type)
+                        selectAllSql = relSql[0]
+                        selectBadSql = relSql[1]
                     } else if (dq_type != 'count' && (newStatus in approvalStatuses) && dq_type != 'other') {
                         sendValidationError('dbObjectLink','Не заполнен Проверяемый объект данных','Укажите объект')
                     }
@@ -1605,8 +1684,8 @@ def runMain(instance) {
         copyScriptToFilter(instance)
     }
 
-    if (dq_type == 'relevance') {
-        // LOG.info('relevance')
+    if (dq_type == 'relevance_day') {
+        // LOG.info('relevance_day')
 
         String rawValue = ''
 
