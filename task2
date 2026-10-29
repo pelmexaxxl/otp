@@ -1,0 +1,120 @@
+ft_from_dqla
+def getINSTANCE_ID() { return instance.businessId }
+
+ALLOWED_FT_FIELDS = [
+        'agreement_type',
+        'businessprocess',
+        'process2',
+        'BrdTeam1',
+        'BrdTeam2',
+        'consumer',
+        'business_steward'
+    ]
+    OTHER_FIELDS = [
+        'dqla_date',
+        'dqla_frequency',
+        'threshold2',
+        'term_resolve',
+        'description'
+    ]
+    FIELD_LABELS = [
+        'agreement_type'    : 'Тип соглашения КД',
+        'businessprocess'   : 'Бизнес процесс',
+        'process2'          : 'Процесс',
+        'BrdTeam1'          : 'Команда поставщика',
+        'BrdTeam2'          : 'Команда потребителя',
+        'consumer'          : 'Потребитель данных',
+        'business_steward'  : 'Cтюард данных',
+        'dqla_date'         : 'Дата заключения соглашения',
+        'dqla_frequency'    : 'Периодичность пересмотра соглашения',
+        'threshold2'        : 'Порог создания массовых инцидентов КД',
+        'term_resolve'      : 'Срок решения инцидентов',
+        'description'       : 'Описание'
+    ]
+    def keys = FIELD_LABELS.keySet() as String[]
+
+def checkVersion() {
+    try {
+        def v = instance.version.split("\\.")
+        if (v && v[0].toInteger() > 0) {
+            return [result: true, name: 'Проверка версии']
+        }
+        return [result: false, name: 'Проверка версии', errors: ['Отсутствует опубликованная версия']]
+    } catch (e) {
+        return [result: false, name: 'Проверка версии', errors: ['Отсутствует опубликованная версия']]
+    }
+}
+
+def isNotEmpty(value) { // если не пусто - тру
+    if (value == null) return false
+    if (value instanceof String && value.trim().isEmpty()) return false
+    if (value instanceof Collection && value.isEmpty()) return false
+    if (value instanceof Map && value.isEmpty()) return false
+    return true
+}
+
+def checkAllowedFields(track_fields, ALLOWED_FT_FIELDS, FIELD_LABELS) {
+    if (published_instance == null) {
+        return [result: false, name: 'Проверка изменённых полей', errors: ['Отсутствует опубликованная версия']]
+    }
+    def errors = []
+    def changed_fields = []
+    for (field in track_fields) {
+        def old_val = published_instance.attrByName(field)
+        def new_val = instance.attrByName(field)
+        if ((isNotEmpty(old_val) || isNotEmpty(new_val)) && (old_val != new_val)) {
+            changed_fields << field
+            if (!ALLOWED_FT_FIELDS.contains(field)) {
+                def label = FIELD_LABELS[field] ?: field
+                errors << "Изменено поле '${label}' — требуется ревью".toString()
+            }
+        }
+    }
+    LOG.info("[FT] Изменённые поля DQLA ${INSTANCE_ID}: ${changed_fields}")
+    if (errors) {
+        return [result: false, name: 'Проверка изменённых полей', errors: errors]
+    }
+    return [result: true, name: 'Проверка изменённых полей']
+}
+
+def ft_dqla(instance, keys, FIELD_LABELS, ALLOWED_FT_FIELDS) {
+    LOG.info("[FT] Проверяется возможность FT для DQLA ${INSTANCE_ID}")
+    def oldVersion = event.getParams().get("oldVersion");
+    if (oldVersion == null) {
+        LOG.warning("[FT] oldVersion == null => exit ft")
+        instance.replaceAttr('ftDQLA', false)
+        return
+        }
+    String newStatus = instance.typedAttrByName(InstanceService.STATUS_FIELD)
+    // if (newStatus != '30') {
+    //     LOG.info("[FT] newStatus != '30' => exit ft")
+    //     instance.replaceAttr('ftDQLA', false)
+    //     return
+    //     }
+    String oldStatus = oldVersion.typedAttrByName(InstanceService.STATUS_FIELD)
+    // if (oldStatus.equals(newStatus)) {
+    //     LOG.info("[FT] oldStatus.equals(newStatus) => exit ft")
+    //     instance.replaceAttr("ftDQLA", false)
+    //     return
+    //     }
+    def check_version = checkVersion()
+    try {
+        published_instance = instanceService.getInstance(instance.businessId, GlossaryMode.PUBLIC)
+    } catch (e) {
+        LOG.warning("[FT] cant get published_instance, error: ${e}")
+        published_instance = null
+        instance.replaceAttr("ftDQLA", false)
+    }
+    resultSet = jdbcTemplate.queryForList("select distinct jsonb_object_keys(json_obj - 'macroStatus' - 'parent' - 'processId' - 'status') as obj_keys from object_data_table odt where business_id = ?", instance.businessId)
+    LOG.info("resultSet type is ${resultSet.getClass()} and content is ${resultSet.obj_keys}")
+    cur_track_fields = resultSet.obj_keys
+    def check_fields = []
+    check_fields = checkAllowedFields(cur_track_fields, ALLOWED_FT_FIELDS, FIELD_LABELS)
+    def check_list = [check_version.result, check_fields.result]
+    LOG.info("[FT] Результат FT DQLA ${INSTANCE_ID}: ${check_list}")
+    def all_ok = check_list.every() == true
+    // LOG.info("[FT] all_ok = ${all_ok}")
+    if (all_ok) { instance.replaceAttr("ftDQLA", true) } else { instance.replaceAttr("ftDQLA", false) }
+}
+
+ft_dqla(instance, keys, FIELD_LABELS, ALLOWED_FT_FIELDS)
