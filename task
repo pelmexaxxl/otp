@@ -1,60 +1,149 @@
-На вкладке DQ - Реализация - заменить Тип проверки Актуальность на:
-
-Актуальность ко времени
-
-Актуальность ко дню.
-
-
-
-
-ВАЖНО:
-
-При предложении шаблона необходимо учитывать, какая схема будет проверяться? ODS или DM.
-Для этого берем name из dbSchema через attrByName и проверяем что в названии есть like '%dm_%' - для dm и like '%ods_%' - для ods
-
-Если выбран ODS - from utl_core.load_ods_ctl
-
-Если выбран DM - from utl_core.load_dm_ctl
-
-Для остальных - указать коммент проверка на объект DDS запрещена вместо скрипта
-
-Шаблон проверки в обоих случаях для - Скрипт отбора данных - SELECT 1
- 
-Скрипт выполнения проверки:
- 
-при выборе Актуальность ко времени:
- 
-select
-    0 as cnt,
-    current_date::date as check_dttm
-where not exists (
-    select 1
-    from utl_core.load_ods_ctl
-    where schema_nm = '*' --схема проверяемого объект
-      and table_nm = '*'  --наименование таблицы
-      and sys_ts >= current_date                   
-      and sys_ts < current_date + interval '* hours'  -сюда вместо звездочи берешь через attrByName из IntervalStartStr (там сразу готовая строка)
+ft_from_camunda
+with 
+ schedule as (
+    select distinct
+    area,
+    dqi_id AS dqi_id,
+    dqi_period,
+    -- Тип расписания
+    CASE
+        WHEN TRIM(dqi_period) LIKE '@once:%' THEN 'once'
+        ELSE 'cron'
+    END AS period_type,
+    -- Нормализуем строку: удаляем префикс @once:
+    TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')) AS period_normalized,
+    -- Минута
+    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 1)::INT AS cron_min,
+    -- Час
+    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 2)::INT AS cron_hour,
+    -- День месяца
+    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 3) AS daymonth_raw,
+    -- День недели (для @once отсутствует)
+    CASE
+        WHEN TRIM(dqi_period) LIKE '@once:%' THEN NULL
+        ELSE SPLIT_PART(TRIM(dqi_period), ' ', 5)
+    END AS dayweek_raw,
+    -- День месяца (для @once отсутствует)
+    NULLIF(SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 3),'*')::INT AS daymonth,
+    -- Нормализуем воскресенье: 7 -> 0
+    CASE
+        WHEN TRIM(dqi_period) LIKE '@once:%' THEN NULL
+        WHEN NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*') IS NULL
+            THEN NULL
+        WHEN NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*')::INT = 7
+            THEN 0
+        ELSE NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*')::INT
+    END AS dayweek,
+    t.min_dt,
+    -- Дата и время разового запуска
+    CASE
+            WHEN TRIM(dqi_period) LIKE '@once:%' THEN MAKE_TIMESTAMP(
+                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 1)::INT, -- год
+                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 2)::INT, -- месяц
+                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 3)::INT, -- день
+                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 4)::INT, -- час
+                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 5)::INT, -- минута
+                0
+            )
+            ELSE NULL
+        END AS once_ts
+    from {{ ref('dqindicator_vers') }} v
+    left join lateral (select valid_from_dt min_dt from {{ ref('dqindicator_vers') }} v1 where v1.dqi_id= v.dqi_id 
+    order by valid_from_dt limit 1
+    ) t on true
+), -- генерим дни и превращаем их в calc_ts с временем cron (пример 00 07 * * * -> 07:00)
+dqi_datelist as (
+     -- Разовые запуски
+    select  
+        s.area,
+        s.dqi_id,
+        s.once_ts::TIMESTAMPTZ AS calc_ts
+    FROM schedule s
+    WHERE TRIM(dqi_period) LIKE '@once:%'
+    union all
+    select
+        s.area, -- добавлено
+        s.dqi_id,
+        (
+          (d::date)::timestamp
+          + make_interval(hours => s.cron_hour, mins => s.cron_min)
+        )::timestamptz as calc_ts
+    from schedule s
+    cross join lateral generate_series(s.min_dt, current_date+1, interval '1 day') as d
+    where
+        -- daily: * * (DOM='*' and DOW='*')
+        (s.daymonth_raw = '*' and s.dayweek_raw = '*')
+        -- monthly: DOM задан
+        or (s.daymonth is not null and extract(day from d::date)::int = s.daymonth)
+        -- weekly: DOW задан
+        or (s.dayweek is not null and extract(dow from d::date)::int = s.dayweek)
+), -- а каждую дату расчёта берём актуальную конфигурацию (valid_from/valid_to)
+cfg_on_calc as (
+    select distinct
+        c.area, -- добавлено
+        c.dqi_id as dqi_id,
+        c.code,
+        c.name,
+        c.dqi_period,
+        c.dqi_calc_method,
+        c.dqi_format,
+        c.dqi_accept_level,
+        c.dqi_target_level,
+        dl.calc_ts,
+        c.dqimplementation_id,
+        'DQ_'||c.dqimplementation_id||'_impl' as dqimplementation_code, --c.dqimplementation_code,
+        c.dqimplementation_name, -- добавлено
+        coalesce(c.dqimplementation_weight, 1)::numeric as weight
+    from dqi_datelist dl
+    join {{ ref('dqindicator_vers') }} c
+    on c.area = dl.area and c.dqi_id = dl.dqi_id and dl.calc_ts >= c.valid_from_dt and dl.calc_ts < c.valid_to_dt
+),
+--select * from dqi_datelist   where dqi_id=34296237
+-- Логи запусков: берём последний успешный запуск ДО calc_ts
+runs_on_calc as (
+    select 
+        x.*,
+        r.run_ts,
+        r.end_ts, -- добавлено
+        r.total_rec_count,
+        r.bad_rec_count,
+        r.dq_level -- добавлено
+    from cfg_on_calc x
+    join lateral (
+        select
+            dqs.run_ts,
+            dqs.end_ts, -- добавлено
+            dqs.total_rec_count,
+            dqs.bad_rec_count,
+            floor(100000 * (dqs.total_rec_count - dqs.bad_rec_count) / (10 * NULLIF(dqs.total_rec_count, 0))::double precision) / 100::double precision as dq_level -- добавлено
+        from dq.dqimplementation_stat dqs
+        where dqs.dqimplementation_code = x.dqimplementation_code
+          and dqs.status::text = 'success'
+          and dqs.run_ts::date <= x.calc_ts::date
+          and dqs.dqimplementation_code !~~ '%work%'::text
+          and not (dqs.total_rec_count = 0 and dqs.bad_rec_count = 0)
+        order by dqs.run_ts desc
+        limit 1
+    ) r on true
 )
-
-
-Скрипт выполнения проверки:
- 
-при выборе Актуальность ко дню:
- 
-select
-    0 as cnt,
-    current_date::date as check_dttm
-where not exists (
-    select 1
-    from utl_core.load_ods_ctl
-    where schema_nm = '*'--схема проверяемого объекта
-      and table_nm = '*'-- наименование таблицы
-      and sys_ts::date = current_date   --наличие загрузки за текущую дату     
-   )
- 
- 
-Чтобы пользователь не редактировал созданный скрипт - автоматически подставить проверяемую схему и объект в:
-
-schema_nm = '*' (берем name из dbSchema)
-
-table_nm = '*' из указываемой таблицы как в остальных (старых) типах проверки
+ SELECT 
+    r.area, 
+    r.calc_ts AS last_updated,
+    r.dqi_id,
+    r.code,
+    r.name,
+    r.dqi_period,
+    r.dqi_calc_method,
+    r.dqi_format,
+    r.dqi_accept_level,
+    r.dqi_target_level,
+    r.dqimplementation_id,
+    r.dqimplementation_code,
+    r.dqimplementation_name, -- добавлено
+    r.end_ts, -- добавлено
+    r.weight,
+    r.total_rec_count,
+    r.bad_rec_count,
+    r.dq_level, -- добавлено
+    r.run_ts
+   FROM runs_on_calc r
