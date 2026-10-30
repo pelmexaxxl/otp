@@ -695,10 +695,13 @@ def getRelevanceTableName(def instance) {
  * Формирует SQL для проверок «Актуальность ко времени» (relevance_hours)
  * и «Актуальность ко дню» (relevance_day).
  *
- * По имени схемы определяется таблица контроля загрузки:
- *   '%ods_%' -> utl_core.load_ods_ctl
- *   '%dm_%'  -> utl_core.load_dm_ctl
- *   иначе    -> проверка запрещена (DDS) — вместо скрипта пишется комментарий.
+ * По имени схемы определяется таблица контроля загрузки (первый сегмент имени
+ * должен заканчиваться на ods/dm, после него допускается суффикс через '_'):
+ *   ...ods / ...ods_* -> utl_core.load_ods_ctl
+ *   ...dm / ...dm_*   -> utl_core.load_dm_ctl (включая dm, idm_*, odm, edm)
+ *   иначе             -> проверка запрещена (DDS) — вместо скрипта пишется комментарий.
+ * Для relevance_day значение intervalStartStr вычитается из current_date;
+ * если оно пустое, используется просто current_date.
  *
  * @return [selectAllSql, selectBadSql]
  */
@@ -712,8 +715,9 @@ def buildRelevanceSql(def instance, String dq_type) {
     String loadCtlTable = null
     if (schemaName) {
         String s = schemaName.toLowerCase()
-        if (s.contains('ods_'))      loadCtlTable = 'utl_core.load_ods_ctl'
-        else if (s.contains('dm_'))  loadCtlTable = 'utl_core.load_dm_ctl'
+        // Первый сегмент имени схемы должен заканчиваться на ods/dm, после него может быть суффикс через '_'.
+        if (s ==~ /^[a-z0-9]*ods(?:_.*)?$/)      loadCtlTable = 'utl_core.load_ods_ctl'
+        else if (s ==~ /^[a-z0-9]*dm(?:_.*)?$/)  loadCtlTable = 'utl_core.load_dm_ctl'
     }
 
     if (!loadCtlTable) {
@@ -736,6 +740,8 @@ def buildRelevanceSql(def instance, String dq_type) {
             "      and sys_ts < current_date + interval '${hours} hours'\n" +
             ")"
     } else {
+        def days = instance.attrByName('intervalStartStr')
+        String dayCondition = hasValue(days) ? "sys_ts::date = current_date - ${days}" : 'sys_ts::date = current_date'
         selectBadSql =
             "select\n" +
             "    0 as cnt,\n" +
@@ -745,7 +751,7 @@ def buildRelevanceSql(def instance, String dq_type) {
             "    from ${loadCtlTable}\n" +
             "    where schema_nm = '${schemaName}'\n" +
             "      and table_nm = '${tableName}'\n" +
-            "      and sys_ts::date = current_date\n" +
+            "      and ${dayCondition}\n" +
             ")"
     }
 
