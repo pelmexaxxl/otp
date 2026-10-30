@@ -1,149 +1,116 @@
-ft_from_camunda
-with 
- schedule as (
-    select distinct
-    area,
-    dqi_id AS dqi_id,
-    dqi_period,
-    -- Тип расписания
-    CASE
-        WHEN TRIM(dqi_period) LIKE '@once:%' THEN 'once'
-        ELSE 'cron'
-    END AS period_type,
-    -- Нормализуем строку: удаляем префикс @once:
-    TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')) AS period_normalized,
-    -- Минута
-    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 1)::INT AS cron_min,
-    -- Час
-    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 2)::INT AS cron_hour,
-    -- День месяца
-    SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 3) AS daymonth_raw,
-    -- День недели (для @once отсутствует)
-    CASE
-        WHEN TRIM(dqi_period) LIKE '@once:%' THEN NULL
-        ELSE SPLIT_PART(TRIM(dqi_period), ' ', 5)
-    END AS dayweek_raw,
-    -- День месяца (для @once отсутствует)
-    NULLIF(SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')),' ', 3),'*')::INT AS daymonth,
-    -- Нормализуем воскресенье: 7 -> 0
-    CASE
-        WHEN TRIM(dqi_period) LIKE '@once:%' THEN NULL
-        WHEN NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*') IS NULL
-            THEN NULL
-        WHEN NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*')::INT = 7
-            THEN 0
-        ELSE NULLIF(SPLIT_PART(TRIM(dqi_period), ' ', 5), '*')::INT
-    END AS dayweek,
-    t.min_dt,
-    -- Дата и время разового запуска
-    CASE
-            WHEN TRIM(dqi_period) LIKE '@once:%' THEN MAKE_TIMESTAMP(
-                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 1)::INT, -- год
-                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 2)::INT, -- месяц
-                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 3)::INT, -- день
-                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 4)::INT, -- час
-                SPLIT_PART(TRIM(REGEXP_REPLACE(TRIM(dqi_period), '^@once:\s*', '')), ' ', 5)::INT, -- минута
-                0
-            )
-            ELSE NULL
-        END AS once_ts
-    from {{ ref('dqindicator_vers') }} v
-    left join lateral (select valid_from_dt min_dt from {{ ref('dqindicator_vers') }} v1 where v1.dqi_id= v.dqi_id 
-    order by valid_from_dt limit 1
-    ) t on true
-), -- генерим дни и превращаем их в calc_ts с временем cron (пример 00 07 * * * -> 07:00)
-dqi_datelist as (
-     -- Разовые запуски
-    select  
-        s.area,
-        s.dqi_id,
-        s.once_ts::TIMESTAMPTZ AS calc_ts
-    FROM schedule s
-    WHERE TRIM(dqi_period) LIKE '@once:%'
-    union all
-    select
-        s.area, -- добавлено
-        s.dqi_id,
-        (
-          (d::date)::timestamp
-          + make_interval(hours => s.cron_hour, mins => s.cron_min)
-        )::timestamptz as calc_ts
-    from schedule s
-    cross join lateral generate_series(s.min_dt, current_date+1, interval '1 day') as d
-    where
-        -- daily: * * (DOM='*' and DOW='*')
-        (s.daymonth_raw = '*' and s.dayweek_raw = '*')
-        -- monthly: DOM задан
-        or (s.daymonth is not null and extract(day from d::date)::int = s.daymonth)
-        -- weekly: DOW задан
-        or (s.dayweek is not null and extract(dow from d::date)::int = s.dayweek)
-), -- а каждую дату расчёта берём актуальную конфигурацию (valid_from/valid_to)
-cfg_on_calc as (
-    select distinct
-        c.area, -- добавлено
-        c.dqi_id as dqi_id,
-        c.code,
-        c.name,
-        c.dqi_period,
-        c.dqi_calc_method,
-        c.dqi_format,
-        c.dqi_accept_level,
-        c.dqi_target_level,
-        dl.calc_ts,
-        c.dqimplementation_id,
-        'DQ_'||c.dqimplementation_id||'_impl' as dqimplementation_code, --c.dqimplementation_code,
-        c.dqimplementation_name, -- добавлено
-        coalesce(c.dqimplementation_weight, 1)::numeric as weight
-    from dqi_datelist dl
-    join {{ ref('dqindicator_vers') }} c
-    on c.area = dl.area and c.dqi_id = dl.dqi_id and dl.calc_ts >= c.valid_from_dt and dl.calc_ts < c.valid_to_dt
-),
---select * from dqi_datelist   where dqi_id=34296237
--- Логи запусков: берём последний успешный запуск ДО calc_ts
-runs_on_calc as (
-    select 
-        x.*,
-        r.run_ts,
-        r.end_ts, -- добавлено
-        r.total_rec_count,
-        r.bad_rec_count,
-        r.dq_level -- добавлено
-    from cfg_on_calc x
-    join lateral (
-        select
-            dqs.run_ts,
-            dqs.end_ts, -- добавлено
-            dqs.total_rec_count,
-            dqs.bad_rec_count,
-            floor(100000 * (dqs.total_rec_count - dqs.bad_rec_count) / (10 * NULLIF(dqs.total_rec_count, 0))::double precision) / 100::double precision as dq_level -- добавлено
-        from dq.dqimplementation_stat dqs
-        where dqs.dqimplementation_code = x.dqimplementation_code
-          and dqs.status::text = 'success'
-          and dqs.run_ts::date <= x.calc_ts::date
-          and dqs.dqimplementation_code !~~ '%work%'::text
-          and not (dqs.total_rec_count = 0 and dqs.bad_rec_count = 0)
-        order by dqs.run_ts desc
-        limit 1
-    ) r on true
-)
- SELECT 
-    r.area, 
-    r.calc_ts AS last_updated,
-    r.dqi_id,
-    r.code,
-    r.name,
-    r.dqi_period,
-    r.dqi_calc_method,
-    r.dqi_format,
-    r.dqi_accept_level,
-    r.dqi_target_level,
-    r.dqimplementation_id,
-    r.dqimplementation_code,
-    r.dqimplementation_name, -- добавлено
-    r.end_ts, -- добавлено
-    r.weight,
-    r.total_rec_count,
-    r.bad_rec_count,
-    r.dq_level, -- добавлено
-    r.run_ts
-   FROM runs_on_calc r
+//ft_from_camunda
+def instance = instanceService.getInstance(execution.getVariable("objectId"))
+def check_hist(instance) {
+         String sql_stmt = """select status, bad_rec_count 
+        from dq.dqimplementation_stat ds
+        where ds.dqimplementation_code =?
+        and run_ts > current_date - interval '1 day'
+        order by ds.run_ts desc limit 1"""
+
+
+        dag_name = instance.attrByName('emmDagName')
+        resSql = jdbcTemplate.queryForList(sql_stmt, dag_name)
+        run_status=resSql[0]?.status
+        bad_rec_count = resSql[0]?.bad_rec_count
+
+        if (run_status == 'success' && bad_rec_count < 100000) {
+            return true
+        }
+        return false
+    }
+//
+def check_standard(instance) {
+    return instance.attrByName('standardLogic')
+}
+//
+def check_name(instance) {
+try {
+    name = instance.name
+    table = instance.attrByName('dbTable')
+    t_instance = instanceService.getInstance(table?.id)
+    schema = t_instance?.parent?.name
+    t_name_part = name.split(':')[0]
+    n_list = t_name_part.split('\\.')
+    n_sch = n_list[0]
+    n_tbl = n_list[1]
+    return n_sch == schema && n_tbl == t_instance?.name
+} catch (e) {return false}
+}
+
+def check_time(instance) {
+    sql_stmt = """select 
+    case 
+        when (end_ts - run_ts) <= interval '5 minutes' then true
+        else false
+        end as check_result
+    from dq.dqimplementation_stat ds
+    where ds.dqimplementation_code = ?
+    and run_ts > current_date - interval '1 day'
+    order by ds.run_ts desc 
+    limit 1;"""
+    dag_name = instance.attrByName('emmDagName')
+    resSql = jdbcTemplate.queryForList(sql_stmt, dag_name)
+    run_status=resSql[0]?.check_result
+    if (run_status != null) {
+        return run_status
+    }
+    return false
+}
+
+//
+def check_fsd(instance) {
+    name = instance.name
+    table = instance.attrByName('dbTable')
+    dq_pk = instance.attrByName('dbObjectLinkPKcol')
+
+    t_instance = instanceService.getInstance(table?.id)
+    if (!t_instance.attrByName('FSD')?.id) {
+        return false
+    } else { 
+        fsd_tbl = instanceService.getInstance(t_instance.attrByName('FSD')?.id)?.attrByName('tableAttr')
+        pks = fsd_tbl.findAll { it.Is_pk_field == true }
+
+        
+        def dqPkNames = dq_pk.collect { it.name }
+        def fsdPkNames = pks.collect { it.DM_col_name }
+
+        // Проверяем, что все имена из dq_pk присутствуют в pks
+        def missingInDq = fsdPkNames - dqPkNames
+        def allFsdPkPresent = missingInDq.isEmpty()
+        
+        return allFsdPkPresent
+
+        // def missing = dqPkNames - fsdPkNames
+        // def allMatch = missing.isEmpty()
+        // return [
+        //     match: allFsdPkPresent,
+        //     dqPkNames: dqPkNames,
+        //     fsdPkNames: fsdPkNames,
+        //     missingInDq: missingInDq,
+        //     extraInDq: dqPkNames - fsdPkNames,
+        //     message: allFsdPkPresent ? "✅ Все PK поля из FSD присутствуют в Идентификаторе записи" : "❌ В Идентификаторе записи отсутствуют поля FSD PK"
+        // ]
+    
+       // return [allMatch: allMatch, missing: missing, dqPkNames: dqPkNames, fsdPkNames: fsdPkNames] 
+    }
+    
+}
+
+def check_ft(instance) {
+    //
+    fsd = check_fsd(instance)
+    hist = check_hist(instance)
+    time = check_time(instance)
+    name = check_name(instance)
+    st = check_standard(instance)
+
+
+  
+  check_list = [fsd, hist, time, name, st]
+  // return check_list
+//   LOG.info(" Результат ФТ ${check_list}")
+  all_ok = check_list.every() == true
+  return all_ok
+    
+}
+return check_ft(instance)
